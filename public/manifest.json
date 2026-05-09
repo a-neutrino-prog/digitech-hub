@@ -1,27 +1,51 @@
 {
-  "name": "ডিজিটেক হাব",
-  "short_name": "ডিজিটেক",
-  "description": "আপনার ব্যবসা, আপনার হাতের মুঠোয় - ব্যবসায়িক ম্যানেজমেন্ট অ্যাপ",
+  "name": "ডিজিটেক হাব - ব্যবসায়িক ম্যানেজমেন্ট",
+  "short_name": "ডিজিটেক হাব",
+  "description": "আপনার ব্যবসা, আপনার হাতের মুঠোয় — আয়-ব্যয়, গ্রাহক, কাজ ট্র্যাকিং",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f3f4f6",
   "theme_color": "#2563EB",
-  "orientation": "portrait",
+  "orientation": "portrait-primary",
+  "lang": "bn",
+  "dir": "ltr",
+  "id": "/",
+  "categories": ["business", "productivity", "utilities"],
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%232563EB'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>📱</text></svg>",
+      "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%232563EB'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>📱</text></svg>",
+      "src": "/icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
     }
   ],
-  "categories": ["business", "productivity", "utilities"],
-  "lang": "bn",
-  "dir": "ltr"
+  "screenshots": [
+    {
+      "src": "/screenshot-mobile.png",
+      "sizes": "540x960",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "ডিজিটেক হাব ড্যাশবোর্ড"
+    }
+  ]
 }

@@ -3,20 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#2563EB" />
-    <meta name="description" content="ডিজিটেক হাব - আপনার ব্যবসা, আপনার হাতের মুঠোয়" />
     
     <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#2563EB" />
+    <meta name="description" content="ডিজিটেক হাব - আপনার ব্যবসা, আপনার হাতের মুঠোয়" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ডিজিটেক হাব" />
+    <meta name="application-name" content="ডিজিটেক হাব" />
+    <meta name="msapplication-TileColor" content="#2563EB" />
     
-    <!-- Manifest -->
+    <!-- PWA Manifest -->
     <link rel="manifest" href="/manifest.json" />
     
-    <!-- Apple Touch Icon -->
-    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%232563EB'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>📱</text></svg>" />
+    <!-- Icons -->
+    <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,7 +30,6 @@
     <title>ডিজিটেক হাব - ব্যবসায়িক ম্যানেজমেন্ট</title>
     
     <style>
-      /* Offline indicator styles */
       .offline-indicator {
         position: fixed;
         top: 0;
@@ -37,13 +40,72 @@
         text-align: center;
         padding: 8px;
         font-size: 12px;
-        font-family: 'Noto Sans Bengali', sans-serif;
+        font-family: 'Hind Siliguri', sans-serif;
         z-index: 9999;
         transform: translateY(-100%);
         transition: transform 0.3s ease;
       }
       .offline-indicator.show {
         transform: translateY(0);
+      }
+      /* PWA Install Banner */
+      .pwa-install-banner {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: white;
+        border-top: 1px solid #e5e7eb;
+        padding: 12px 16px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        z-index: 9998;
+        transform: translateY(100%);
+        transition: transform 0.3s ease;
+        box-shadow: 0 -4px 12px rgba(0,0,0,0.1);
+        font-family: 'Hind Siliguri', sans-serif;
+      }
+      .pwa-install-banner.show {
+        transform: translateY(0);
+      }
+      .pwa-install-banner img {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+      }
+      .pwa-install-banner .info {
+        flex: 1;
+      }
+      .pwa-install-banner .info h3 {
+        font-size: 14px;
+        font-weight: 600;
+        color: #1f2937;
+        margin: 0;
+      }
+      .pwa-install-banner .info p {
+        font-size: 11px;
+        color: #6b7280;
+        margin: 2px 0 0;
+      }
+      .pwa-install-banner .install-btn {
+        background: #2563EB;
+        color: white;
+        border: none;
+        padding: 8px 20px;
+        border-radius: 10px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Hind Siliguri', sans-serif;
+      }
+      .pwa-install-banner .close-btn {
+        background: none;
+        border: none;
+        color: #9ca3af;
+        font-size: 20px;
+        cursor: pointer;
+        padding: 4px;
       }
     </style>
   </head>
@@ -53,24 +115,32 @@
       📴 অফলাইন মোড - ইন্টারনেট সংযোগ নেই
     </div>
     
+    <!-- PWA Install Banner -->
+    <div id="pwa-install-banner" class="pwa-install-banner">
+      <img src="/icon-192.png" alt="ডিজিটেক হাব" />
+      <div class="info">
+        <h3>ডিজিটেক হাব ইনস্টল করুন</h3>
+        <p>হোম স্ক্রিনে যোগ করুন, অ্যাপের মতো ব্যবহার করুন</p>
+      </div>
+      <button class="install-btn" id="pwa-install-btn">ইনস্টল</button>
+      <button class="close-btn" id="pwa-close-btn">✕</button>
+    </div>
+    
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     
-    <!-- Service Worker Registration & Offline Detection -->
     <script>
-      // Register Service Worker
+      // ===== Service Worker Registration =====
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then((registration) => {
-              console.log('SW registered:', registration.scope);
-              
-              // Check for updates
-              registration.addEventListener('updatefound', () => {
-                const newWorker = registration.installing;
+          navigator.serviceWorker.register('/sw.js', { scope: '/' })
+            .then((reg) => {
+              console.log('[PWA] SW registered:', reg.scope);
+              reg.addEventListener('updatefound', () => {
+                const newWorker = reg.installing;
+                if (!newWorker) return;
                 newWorker.addEventListener('statechange', () => {
                   if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    // New version available
                     if (confirm('নতুন আপডেট পাওয়া গেছে! রিফ্রেশ করতে চান?')) {
                       newWorker.postMessage('skipWaiting');
                       window.location.reload();
@@ -79,26 +149,75 @@
                 });
               });
             })
-            .catch((error) => {
-              console.log('SW registration failed:', error);
-            });
+            .catch((err) => console.log('[PWA] SW error:', err));
         });
       }
       
-      // Offline/Online detection
-      const offlineIndicator = document.getElementById('offline-indicator');
-      
-      function updateOnlineStatus() {
+      // ===== Offline/Online Detection =====
+      const offlineEl = document.getElementById('offline-indicator');
+      function updateOnline() {
         if (navigator.onLine) {
-          offlineIndicator.classList.remove('show');
+          offlineEl.classList.remove('show');
         } else {
-          offlineIndicator.classList.add('show');
+          offlineEl.classList.add('show');
         }
       }
+      window.addEventListener('online', updateOnline);
+      window.addEventListener('offline', updateOnline);
+      updateOnline();
       
-      window.addEventListener('online', updateOnlineStatus);
-      window.addEventListener('offline', updateOnlineStatus);
-      updateOnlineStatus();
+      // ===== PWA Install Prompt =====
+      let deferredPrompt = null;
+      const banner = document.getElementById('pwa-install-banner');
+      const installBtn = document.getElementById('pwa-install-btn');
+      const closeBtn = document.getElementById('pwa-close-btn');
+      
+      // Capture the install prompt
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        // Show install banner after 3 seconds
+        setTimeout(() => {
+          if (deferredPrompt) {
+            banner.classList.add('show');
+          }
+        }, 3000);
+      });
+      
+      // Install button click
+      installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        banner.classList.remove('show');
+        deferredPrompt.prompt();
+        const result = await deferredPrompt.userChoice;
+        console.log('[PWA] Install:', result.outcome);
+        deferredPrompt = null;
+      });
+      
+      // Close banner
+      closeBtn.addEventListener('click', () => {
+        banner.classList.remove('show');
+        // Don't show again for 7 days
+        localStorage.setItem('pwa_banner_dismissed', Date.now().toString());
+      });
+      
+      // Check if dismissed recently
+      const dismissed = localStorage.getItem('pwa_banner_dismissed');
+      if (dismissed && Date.now() - parseInt(dismissed) < 7 * 24 * 60 * 60 * 1000) {
+        // Don't show if dismissed within 7 days
+        window.addEventListener('beforeinstallprompt', (e) => {
+          e.preventDefault();
+          deferredPrompt = e;
+          // Don't show banner
+        });
+      }
+      
+      // Hide banner if already installed
+      window.addEventListener('appinstalled', () => {
+        banner.classList.remove('show');
+        deferredPrompt = null;
+        console.log('[PWA] App installed!');
+      });
     </script>
   </body>
 </html>
