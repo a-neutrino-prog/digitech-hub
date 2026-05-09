@@ -10,6 +10,8 @@ import {
   signInAnonymously,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut as fbSignOut,
   onAuthStateChanged,
   type User,
@@ -69,6 +71,19 @@ export async function signInEmail(email: string, password: string): Promise<{ us
         return { user: null, error: e2.message };
       }
     }
+    return { user: null, error: e.message };
+  }
+}
+
+export async function signInWithGoogle(): Promise<{ user: User | null; error: string | null }> {
+  const auth = getFirebaseAuth();
+  if (!auth) return { user: null, error: 'Firebase not configured' };
+  try {
+    const provider = new GoogleAuthProvider();
+    const result = await signInWithPopup(auth, provider);
+    currentUser = result.user;
+    return { user: result.user, error: null };
+  } catch (e: any) {
     return { user: null, error: e.message };
   }
 }

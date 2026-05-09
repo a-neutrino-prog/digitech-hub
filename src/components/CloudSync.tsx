@@ -5,6 +5,7 @@ import {
   listenAuth,
   signInAnon,
   signInEmail,
+  signInWithGoogle,
   signOut,
   fullSync,
   uploadToCloud,
@@ -98,6 +99,15 @@ export default function CloudSync({ navigate, refresh }: Props) {
     setTimeout(() => setSyncStatus(realtimeOn ? 'realtime' : 'idle'), 3000);
   };
 
+  const handleGoogleLogin = async () => {
+    setLoginLoading(true);
+    setLoginError('');
+    const { user: u, error } = await signInWithGoogle();
+    setLoginLoading(false);
+    if (u) { setUser(u); handleSync(); }
+    else { setLoginError(error || 'Google লগইন ব্যর্থ'); }
+  };
+
   const handleAnonLogin = async () => {
     setLoginLoading(true);
     const u = await signInAnon();
@@ -176,11 +186,19 @@ export default function CloudSync({ navigate, refresh }: Props) {
     <div className="bg-gray-100 min-h-screen">
       {/* Header */}
       <div className="bg-gradient-to-br from-cyan-600 to-blue-700 text-white px-4 pt-4 pb-6 rounded-b-3xl">
-        <div className="flex items-center gap-3 mb-4">
-          <button onClick={() => navigate('settings')} className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center">
-            <ArrowLeft size={18} />
-          </button>
-          <h2 className="text-lg font-bold">☁️ ক্লাউড সিঙ্ক</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <button onClick={() => navigate('settings')} className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center">
+              <ArrowLeft size={18} />
+            </button>
+            <h2 className="text-lg font-bold">☁️ ক্লাউড সিঙ্ক</h2>
+          </div>
+          {user && (
+            <button onClick={handleSignOut} className="flex items-center gap-1.5 px-3 py-1.5 bg-white/15 rounded-lg text-xs font-medium hover:bg-white/25 transition-all">
+              <LogOut size={14} />
+              লগআউট
+            </button>
+          )}
         </div>
         <div className="bg-white/15 rounded-xl p-4">
           <div className="flex items-center justify-between mb-2">
@@ -239,15 +257,33 @@ export default function CloudSync({ navigate, refresh }: Props) {
         {configured && !user && (
           <div className="bg-white rounded-2xl shadow-sm p-4">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">🔐 লগইন করুন</h3>
+
+            {/* Google Login */}
+            <button onClick={handleGoogleLogin} disabled={loginLoading}
+              className="w-full py-3 bg-white border-2 border-gray-200 rounded-xl font-medium text-sm flex items-center justify-center gap-3 mb-3 hover:bg-gray-50 transition-all disabled:opacity-50">
+              {loginLoading ? <RefreshCw size={16} className="animate-spin text-gray-500" /> : (
+                <svg width="18" height="18" viewBox="0 0 48 48">
+                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                </svg>
+              )}
+              <span className="text-gray-700">Google দিয়ে লগইন</span>
+            </button>
+
+            {/* Anonymous Login */}
             <button onClick={handleAnonLogin} disabled={loginLoading}
               className="w-full py-3 bg-primary text-white rounded-xl font-medium text-sm flex items-center justify-center gap-2 mb-3 disabled:opacity-50">
               {loginLoading ? <RefreshCw size={16} className="animate-spin" /> : <User size={16} />}
               দ্রুত শুরু করুন (বেনামী)
             </button>
+
             <div className="relative my-3">
               <hr className="border-gray-200" />
               <span className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white px-3 text-xs text-gray-400">অথবা</span>
             </div>
+
             <button onClick={() => setShowLogin(!showLogin)}
               className="w-full py-2.5 bg-gray-50 text-gray-700 rounded-xl font-medium text-sm flex items-center justify-center gap-2 border border-gray-200">
               <Mail size={16} /> ইমেইল দিয়ে লগইন
@@ -350,6 +386,72 @@ export default function CloudSync({ navigate, refresh }: Props) {
                   <div className={`w-5 h-5 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${autoSyncOn ? 'left-6' : 'left-0.5'}`} />
                 </button>
               </div>
+            </div>
+
+            {/* Account Info & Google Upgrade */}
+            <div className="bg-white rounded-2xl shadow-sm p-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">👤 অ্যাকাউন্ট</h3>
+              <div className="flex items-center gap-3 mb-3 p-3 bg-gray-50 rounded-xl">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  {user.photoURL ? (
+                    <img src={user.photoURL} alt="" className="w-10 h-10 rounded-full" />
+                  ) : (
+                    <User size={20} className="text-primary" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 truncate">
+                    {user.displayName || user.email || 'বেনামী ব্যবহারকারী'}
+                  </p>
+                  <p className="text-[10px] text-gray-400 truncate">
+                    {user.email || `ID: ${user.uid.slice(0, 12)}...`}
+                  </p>
+                </div>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                  user.isAnonymous 
+                    ? 'bg-yellow-100 text-yellow-700' 
+                    : user.providerData?.[0]?.providerId === 'google.com'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-green-100 text-green-700'
+                }`}>
+                  {user.isAnonymous ? 'বেনামী' : user.providerData?.[0]?.providerId === 'google.com' ? 'Google' : 'Email'}
+                </span>
+              </div>
+
+              {/* বেনামী হলে Google-এ আপগ্রেড অপশন */}
+              {user.isAnonymous && (
+                <div className="space-y-2">
+                  <p className="text-xs text-orange-600 bg-orange-50 p-2 rounded-lg">
+                    ⚠️ বেনামী অ্যাকাউন্টে ডেটা হারাতে পারে। Google দিয়ে লগইন করুন।
+                  </p>
+                  <button onClick={handleGoogleLogin} disabled={loginLoading}
+                    className="w-full py-2.5 bg-white border-2 border-gray-200 rounded-xl font-medium text-sm flex items-center justify-center gap-3 hover:bg-gray-50 transition-all disabled:opacity-50">
+                    {loginLoading ? <RefreshCw size={16} className="animate-spin text-gray-500" /> : (
+                      <svg width="16" height="16" viewBox="0 0 48 48">
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                      </svg>
+                    )}
+                    <span className="text-gray-700">Google দিয়ে আপগ্রেড করুন</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Google ছাড়া লগইন থাকলে Google লিংক অপশন */}
+              {!user.isAnonymous && user.providerData?.[0]?.providerId !== 'google.com' && (
+                <button onClick={handleGoogleLogin} disabled={loginLoading}
+                  className="w-full py-2.5 bg-white border border-gray-200 rounded-xl font-medium text-sm flex items-center justify-center gap-2 hover:bg-gray-50 transition-all disabled:opacity-50 mt-2">
+                  <svg width="14" height="14" viewBox="0 0 48 48">
+                    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                    <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+                  </svg>
+                  Google অ্যাকাউন্টে সুইচ করুন
+                </button>
+              )}
             </div>
 
             {/* Sign Out */}
