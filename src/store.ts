@@ -20,6 +20,7 @@ export interface Service {
 export type JobStatus = 'pending' | 'in-progress' | 'completed' | 'cancelled';
 
 export interface Payment {
+  id?: string;
   amount: number;
   date: number;
   method: 'cash' | 'other';
@@ -162,8 +163,13 @@ export function updateCustomer(id: string, data: Partial<Customer>): void {
 }
 
 export function deleteCustomer(id: string): void {
+  // Delete all jobs of this customer (which also deletes their transactions)
+  const jobs = getJobs().filter(j => j.customerId === id);
+  jobs.forEach(j => deleteJob(j.id));
+  
   const customers = getCustomers().filter(c => c.id !== id);
   setItem('customers', customers);
+  removeCustomerPhoto(id);
 }
 
 export function getCustomerById(id: string): Customer | undefined {
@@ -214,21 +220,26 @@ export function addJob(job: Omit<Job, 'id' | 'createdAt'>): Job {
     id: generateId(),
     createdAt: Date.now(),
   };
-  jobs.push(newJob);
-  setItem('jobs', jobs);
 
   // Auto-create income transaction if there's advance payment
-  if (job.advance > 0) {
+  if (newJob.advance > 0) {
+    const txId = generateId();
+    if (newJob.payments && newJob.payments.length > 0) {
+      newJob.payments[0].id = txId;
+    }
     addTransaction({
+      id: txId,
       type: 'income',
       category: 'সেবা',
-      amount: job.advance,
-      description: `অগ্রিম - জব #${jobs.length}`,
-      date: job.date,
+      amount: newJob.advance,
+      description: `অগ্রিম - জব`,
+      date: newJob.date,
       relatedJobId: newJob.id,
-    });
+    } as any);
   }
 
+  jobs.push(newJob);
+  setItem('jobs', jobs);
   return newJob;
 }
 
@@ -249,16 +260,18 @@ export function completeJob(id: string): void {
     // If there's remaining due, record as income
     if (job.due > 0) {
       const paidNow = job.due;
-      job.payments.push({ amount: paidNow, date: Date.now(), method: 'cash' });
+      const txId = generateId();
+      job.payments.push({ id: txId, amount: paidNow, date: Date.now(), method: 'cash' });
       job.due = 0;
       addTransaction({
+        id: txId,
         type: 'income',
         category: 'সেবা',
         amount: paidNow,
         description: `জব সম্পন্ন - বাকি পরিশোধ`,
         date: Date.now(),
         relatedJobId: id,
-      });
+      } as any);
     }
     setItem('jobs', jobs);
   }
@@ -268,34 +281,51 @@ export function addPaymentToJob(jobId: string, amount: number): void {
   const jobs = getJobs();
   const job = jobs.find(j => j.id === jobId);
   if (job) {
-    job.payments.push({ amount, date: Date.now(), method: 'cash' });
+    const txId = generateId();
+    job.payments.push({ id: txId, amount, date: Date.now(), method: 'cash' });
     job.due = Math.max(0, job.due - amount);
     setItem('jobs', jobs);
 
     addTransaction({
+      id: txId,
       type: 'income',
       category: 'সেবা',
       amount: amount,
       description: `পেমেন্ট - জব`,
       date: Date.now(),
       relatedJobId: jobId,
-    });
+    } as any);
   }
 }
 
 export function deleteJob(id: string): void {
-  const jobs = getJobs().filter(j => j.id !== id);
-  setItem('jobs', jobs);
+  const jobs = getJobs();
+  const job = jobs.find(j => j.id === id);
+  if (job) {
+    // Delete associated transactions
+    const txs = getTransactions().filter(t => t.relatedJobId !== id);
+    setItem('transactions', txs);
+    
+    setItem('jobs', jobs.filter(j => j.id !== id));
+  }
 }
 
 export function deletePaymentFromJob(jobId: string, paymentIndex: number): void {
   const jobs = getJobs();
   const job = jobs.find(j => j.id === jobId);
   if (job && job.payments[paymentIndex]) {
-    const deletedAmount = job.payments[paymentIndex].amount;
+    const payment = job.payments[paymentIndex];
     job.payments.splice(paymentIndex, 1);
-    job.due = job.due + deletedAmount;
+    job.due = job.due + payment.amount;
     setItem('jobs', jobs);
+    
+    if (payment.id) {
+      deleteTransaction(payment.id);
+    } else {
+      const txs = getTransactions();
+      const matchedTx = txs.find(t => t.relatedJobId === jobId && t.amount === payment.amount);
+      if (matchedTx) deleteTransaction(matchedTx.id);
+    }
   }
 }
 
@@ -303,11 +333,19 @@ export function updatePaymentInJob(jobId: string, paymentIndex: number, newAmoun
   const jobs = getJobs();
   const job = jobs.find(j => j.id === jobId);
   if (job && job.payments[paymentIndex]) {
-    const oldAmount = job.payments[paymentIndex].amount;
-    const diff = newAmount - oldAmount;
-    job.payments[paymentIndex].amount = newAmount;
+    const payment = job.payments[paymentIndex];
+    const diff = newAmount - payment.amount;
+    payment.amount = newAmount;
     job.due = Math.max(0, job.due - diff);
     setItem('jobs', jobs);
+    
+    if (payment.id) {
+      updateTransaction(payment.id, { amount: newAmount });
+    } else {
+      const txs = getTransactions();
+      const matchedTx = txs.find(t => t.relatedJobId === jobId && t.amount === (newAmount - diff));
+      if (matchedTx) updateTransaction(matchedTx.id, { amount: newAmount });
+    }
   }
 }
 
@@ -316,9 +354,9 @@ export function getTransactions(): Transaction[] {
   return getItem<Transaction[]>('transactions', []);
 }
 
-export function addTransaction(tx: Omit<Transaction, 'id'>): Transaction {
+export function addTransaction(tx: Omit<Transaction, 'id'> & { id?: string }): Transaction {
   const txs = getTransactions();
-  const newTx: Transaction = { ...tx, id: generateId() };
+  const newTx: Transaction = { id: generateId(), ...tx }; // if tx has id, it overwrites
   txs.push(newTx);
   setItem('transactions', txs);
   return newTx;
@@ -467,6 +505,8 @@ export function clearAllData(): void {
   localStorage.removeItem('transactions');
   localStorage.removeItem('notifications');
   localStorage.removeItem('reminders');
+  localStorage.removeItem('customer_photos');
+  localStorage.removeItem('shopInfo');
 }
 
 export { EXPENSE_CATEGORIES };

@@ -43,7 +43,8 @@ export default function JobForm({ navigate, refresh, editId }: Props) {
     : discountNum;
   const totalAmount = Math.max(0, subtotal - discountAmount);
   const advanceNum = parseFloat(advance) || 0;
-  const due = Math.max(0, totalAmount - advanceNum);
+  const totalPaid = existingJob ? existingJob.payments.reduce((sum, p) => sum + p.amount, 0) : advanceNum;
+  const due = Math.max(0, totalAmount - totalPaid);
 
   const addServiceToList = (serviceId: string) => {
     const service = services.find(s => s.id === serviceId);
@@ -104,7 +105,7 @@ export default function JobForm({ navigate, refresh, editId }: Props) {
       customerId,
       services: selectedServices,
       totalAmount,
-      advance: advanceNum,
+      advance: existingJob ? existingJob.advance : advanceNum,
       due,
       date: existingJob?.date || Date.now(),
       status: status as 'pending' | 'in-progress' | 'completed' | 'cancelled',
@@ -359,7 +360,8 @@ export default function JobForm({ navigate, refresh, editId }: Props) {
                 type="number"
                 value={advance}
                 onChange={e => setAdvance(e.target.value)}
-                className="w-32 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary/20"
+                disabled={!!editId}
+                className="w-32 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 disabled:bg-gray-100"
                 placeholder="০"
               />
             </div>

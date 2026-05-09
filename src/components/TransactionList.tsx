@@ -125,20 +125,31 @@ export default function TransactionList({ navigate }: Props) {
                   )}
                   <p className="text-[10px] text-gray-300 mt-0.5">{formatDateShort(tx.date)}</p>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <button
-                    onClick={() => navigate('transaction-form', { editId: tx.id })}
-                    className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center"
-                  >
-                    <Edit size={12} className="text-gray-400" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(tx.id)}
-                    className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center"
-                  >
-                    <Trash2 size={12} className="text-red-400" />
-                  </button>
-                </div>
+                {tx.relatedJobId ? (
+                  <div className="flex items-center justify-center h-full">
+                    <button
+                      onClick={() => navigate('job-detail', { jobId: tx.relatedJobId! })}
+                      className="text-[10px] text-blue-600 font-medium bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100"
+                    >
+                      জব দেখুন
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => navigate('transaction-form', { editId: tx.id })}
+                      className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center hover:bg-gray-100"
+                    >
+                      <Edit size={12} className="text-gray-500" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(tx.id)}
+                      className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center hover:bg-red-100"
+                    >
+                      <Trash2 size={12} className="text-red-500" />
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ))

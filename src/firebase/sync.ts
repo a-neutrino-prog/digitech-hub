@@ -18,6 +18,7 @@ import {
 } from 'firebase/auth';
 import { getDb, getFirebaseAuth, isFirebaseReady } from './init';
 import { isFirebaseConfigured } from './config';
+import { clearAllData } from '../store';
 
 // ===== Auth =====
 
@@ -96,6 +97,9 @@ export async function signOut(): Promise<void> {
   await fbSignOut(auth);
   currentUser = null;
   localStorage.removeItem('sync_last');
+  localStorage.removeItem('realtime_sync');
+  localStorage.removeItem('auto_sync');
+  clearAllData(); // Clear all data on sign out for multi-tenant safety
 }
 
 // ===== Data Collections =====
