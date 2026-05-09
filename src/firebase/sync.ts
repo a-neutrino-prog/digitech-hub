@@ -11,6 +11,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
+  signInWithRedirect,
   GoogleAuthProvider,
   signOut as fbSignOut,
   onAuthStateChanged,
@@ -85,6 +86,16 @@ export async function signInWithGoogle(): Promise<{ user: User | null; error: st
     currentUser = result.user;
     return { user: result.user, error: null };
   } catch (e: any) {
+    if (e.code === 'auth/popup-blocked') {
+      try {
+        const provider = new GoogleAuthProvider();
+        await signInWithRedirect(auth, provider);
+        // The page will redirect away, returning null without an error prevents the UI from showing a failure immediately.
+        return { user: null, error: null };
+      } catch (redirectError: any) {
+        return { user: null, error: redirectError.message };
+      }
+    }
     return { user: null, error: e.message };
   }
 }
