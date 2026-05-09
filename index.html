@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="bn">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#2563EB" />
+    <meta name="description" content="ডিজিটেক হাব - আপনার ব্যবসা, আপনার হাতের মুঠোয়" />
+    
+    <!-- PWA Meta Tags -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ডিজিটেক হাব" />
+    
+    <!-- Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Apple Touch Icon -->
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%232563EB'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>📱</text></svg>" />
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <title>ডিজিটেক হাব - ব্যবসায়িক ম্যানেজমেন্ট</title>
+    
+    <style>
+      /* Offline indicator styles */
+      .offline-indicator {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: #f59e0b;
+        color: white;
+        text-align: center;
+        padding: 8px;
+        font-size: 12px;
+        font-family: 'Noto Sans Bengali', sans-serif;
+        z-index: 9999;
+        transform: translateY(-100%);
+        transition: transform 0.3s ease;
+      }
+      .offline-indicator.show {
+        transform: translateY(0);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Offline Indicator -->
+    <div id="offline-indicator" class="offline-indicator">
+      📴 অফলাইন মোড - ইন্টারনেট সংযোগ নেই
+    </div>
+    
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Service Worker Registration & Offline Detection -->
+    <script>
+      // Register Service Worker
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((registration) => {
+              console.log('SW registered:', registration.scope);
+              
+              // Check for updates
+              registration.addEventListener('updatefound', () => {
+                const newWorker = registration.installing;
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    // New version available
+                    if (confirm('নতুন আপডেট পাওয়া গেছে! রিফ্রেশ করতে চান?')) {
+                      newWorker.postMessage('skipWaiting');
+                      window.location.reload();
+                    }
+                  }
+                });
+              });
+            })
+            .catch((error) => {
+              console.log('SW registration failed:', error);
+            });
+        });
+      }
+      
+      // Offline/Online detection
+      const offlineIndicator = document.getElementById('offline-indicator');
+      
+      function updateOnlineStatus() {
+        if (navigator.onLine) {
+          offlineIndicator.classList.remove('show');
+        } else {
+          offlineIndicator.classList.add('show');
+        }
+      }
+      
+      window.addEventListener('online', updateOnlineStatus);
+      window.addEventListener('offline', updateOnlineStatus);
+      updateOnlineStatus();
+    </script>
+  </body>
+</html>
