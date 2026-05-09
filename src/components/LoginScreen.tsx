@@ -1,10 +1,17 @@
-import { useState } from 'react';
-import { signInWithGoogle } from '../firebase/sync';
+import { useState, useEffect } from 'react';
+import { signInWithGoogle, checkRedirectResult } from '../firebase/sync';
 import { RefreshCw, Cloud } from 'lucide-react';
 
 export default function LoginScreen() {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // default true for checking redirect
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    checkRedirectResult().then(({ error }) => {
+      if (error) setError(error || 'লগইন করার সময় একটি সমস্যা হয়েছে');
+      setLoading(false);
+    });
+  }, []);
 
   const handleGoogleLogin = async () => {
     setLoading(true);

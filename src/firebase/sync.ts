@@ -12,6 +12,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithPopup,
   signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut as fbSignOut,
   onAuthStateChanged,
@@ -90,12 +91,26 @@ export async function signInWithGoogle(): Promise<{ user: User | null; error: st
       try {
         const provider = new GoogleAuthProvider();
         await signInWithRedirect(auth, provider);
-        // The page will redirect away, returning null without an error prevents the UI from showing a failure immediately.
-        return { user: null, error: null };
+        return { user: null, error: null }; // wait for redirect
       } catch (redirectError: any) {
         return { user: null, error: redirectError.message };
       }
     }
+    return { user: null, error: e.message };
+  }
+}
+
+export async function checkRedirectResult(): Promise<{ user: User | null; error: string | null }> {
+  const auth = getFirebaseAuth();
+  if (!auth) return { user: null, error: null };
+  try {
+    const result = await getRedirectResult(auth);
+    if (result) {
+      currentUser = result.user;
+      return { user: result.user, error: null };
+    }
+    return { user: null, error: null };
+  } catch (e: any) {
     return { user: null, error: e.message };
   }
 }
