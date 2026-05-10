@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { getJobs, getCustomerById, formatTaka, formatDateShort, payCustomerDue } from '../store';
 import type { Page } from '../App';
 import { ArrowLeft, ChevronRight, Phone, Banknote } from 'lucide-react';
+import { useState } from 'react';
+import DuePaymentModal from './DuePaymentModal';
 
 interface Props {
   navigate: (page: Page, params?: Record<string, string>) => void;
@@ -9,6 +11,13 @@ interface Props {
 }
 
 export default function DueList({ navigate, refresh }: Props) {
+  const [modalData, setModalData] = useState<{ isOpen: boolean; customerId: string; maxAmount: number; customerName: string }>({
+    isOpen: false,
+    customerId: '',
+    maxAmount: 0,
+    customerName: ''
+  });
+
   const dueData = useMemo(() => {
     const jobs = getJobs().filter(j => j.due > 0 && j.status !== 'cancelled');
     const customerMap: Record<string, { customerId: string; totalDue: number; jobs: typeof jobs }> = {};
@@ -38,21 +47,20 @@ export default function DueList({ navigate, refresh }: Props) {
     window.open(url, '_blank');
   };
 
-  const handleCollectDue = (customerId: string, totalDue: number) => {
+  const handleCollectDueClick = (customerId: string, totalDue: number, customerName: string) => {
     if (totalDue <= 0) return;
-    const amountStr = window.prompt(`বাকি আদায়ের পরিমাণ লিখুন (সর্বোচ্চ ${totalDue}):`, totalDue.toString());
-    if (amountStr) {
-      const amount = parseInt(amountStr, 10);
-      if (!isNaN(amount) && amount > 0) {
-        if (amount > totalDue) {
-          alert('মোট বাকির চেয়ে বেশি পরিমাণ দেওয়া যাবে না!');
-          return;
-        }
-        payCustomerDue(customerId, amount);
-        refresh();
-      } else {
-        alert('সঠিক টাকার পরিমাণ দিন!');
-      }
+    setModalData({
+      isOpen: true,
+      customerId,
+      maxAmount: totalDue,
+      customerName
+    });
+  };
+
+  const handleDuePayment = (amount: number) => {
+    if (modalData.customerId) {
+      payCustomerDue(modalData.customerId, amount);
+      refresh();
     }
   };
 
@@ -107,7 +115,7 @@ export default function DueList({ navigate, refresh }: Props) {
                 {/* Actions */}
                 <div className="flex gap-2 mt-3">
                   <button
-                    onClick={() => handleCollectDue(item.customerId, item.totalDue)}
+                    onClick={() => handleCollectDueClick(item.customerId, item.totalDue, item.customer?.name || '')}
                     className="flex-1 py-2 bg-orange-50 text-orange-600 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
                   >
                     <Banknote size={12} />
@@ -159,6 +167,14 @@ export default function DueList({ navigate, refresh }: Props) {
           ))
         )}
       </div>
+
+      <DuePaymentModal
+        isOpen={modalData.isOpen}
+        onClose={() => setModalData({ ...modalData, isOpen: false })}
+        onSubmit={handleDuePayment}
+        maxAmount={modalData.maxAmount}
+        customerName={modalData.customerName}
+      />
     </div>
   );
 }

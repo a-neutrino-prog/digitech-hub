@@ -123,7 +123,7 @@ export default function App() {
       case 'job-detail':
         return <JobDetail navigate={navigate} refresh={refresh} jobId={nav.params?.jobId || ''} />;
       case 'customer-detail':
-        return <CustomerDetail navigate={navigate} refresh={refresh} customerId={nav.params?.customerId || ''} />;
+        return <CustomerDetail key={refreshKey} navigate={navigate} refresh={refresh} customerId={nav.params?.customerId || ''} />;
       case 'transaction-form':
         return <TransactionForm navigate={navigate} refresh={refresh} editId={nav.params?.editId} />;
       case 'transaction-list':

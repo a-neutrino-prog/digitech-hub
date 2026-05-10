@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { getCustomerById, getJobs, deleteCustomer, formatTaka, formatDateShort, getCustomerPhoto, payCustomerDue } from '../store';
 import type { Page } from '../App';
 import { ArrowLeft, Edit, Trash2, Star, Phone, MapPin, ChevronRight, CreditCard, MessageCircle, Banknote } from 'lucide-react';
+import DuePaymentModal from './DuePaymentModal';
 
 interface Props {
   navigate: (page: Page, params?: Record<string, string>) => void;
@@ -12,6 +13,7 @@ interface Props {
 export default function CustomerDetail({ navigate, refresh, customerId }: Props) {
   const customer = getCustomerById(customerId);
   const [activeTab, setActiveTab] = useState<'history' | 'due' | 'info'>('history');
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   const customerJobs = useMemo(() => {
     return getJobs()
@@ -46,22 +48,14 @@ export default function CustomerDetail({ navigate, refresh, customerId }: Props)
     window.open(url, '_blank');
   };
 
-  const handleCollectDue = () => {
+  const handleCollectDueClick = () => {
     if (totalDue <= 0) return;
-    const amountStr = window.prompt(`বাকি আদায়ের পরিমাণ লিখুন (সর্বোচ্চ ${totalDue}):`, totalDue.toString());
-    if (amountStr) {
-      const amount = parseInt(amountStr, 10);
-      if (!isNaN(amount) && amount > 0) {
-        if (amount > totalDue) {
-          alert('মোট বাকির চেয়ে বেশি পরিমাণ দেওয়া যাবে না!');
-          return;
-        }
-        payCustomerDue(customerId, amount);
-        refresh();
-      } else {
-        alert('সঠিক টাকার পরিমাণ দিন!');
-      }
-    }
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleDuePayment = (amount: number) => {
+    payCustomerDue(customerId, amount);
+    refresh();
   };
 
   const statusMap: Record<string, { label: string; class: string }> = {
@@ -152,7 +146,7 @@ export default function CustomerDetail({ navigate, refresh, customerId }: Props)
               নতুন কাজ
             </button>
             <button
-              onClick={handleCollectDue}
+              onClick={handleCollectDueClick}
               className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1"
             >
               <Banknote size={14} />
@@ -327,6 +321,14 @@ export default function CustomerDetail({ navigate, refresh, customerId }: Props)
           )}
         </div>
       </div>
+
+      <DuePaymentModal
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        onSubmit={handleDuePayment}
+        maxAmount={totalDue}
+        customerName={customer.name}
+      />
     </div>
   );
 }
