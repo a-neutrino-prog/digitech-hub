@@ -135,7 +135,7 @@ export default function App() {
       case 'notifications':
         return <NotificationPanel navigate={navigate} />;
       case 'due-list':
-        return <DueList key={refreshKey} navigate={navigate} />;
+        return <DueList key={refreshKey} navigate={navigate} refresh={refresh} />;
       case 'reminders':
         return <ReminderList key={refreshKey} navigate={navigate} />;
       case 'reminder-form':

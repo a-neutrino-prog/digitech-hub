@@ -1,13 +1,14 @@
 import { useMemo } from 'react';
-import { getJobs, getCustomerById, formatTaka, formatDateShort } from '../store';
+import { getJobs, getCustomerById, formatTaka, formatDateShort, payCustomerDue } from '../store';
 import type { Page } from '../App';
-import { ArrowLeft, ChevronRight, Phone } from 'lucide-react';
+import { ArrowLeft, ChevronRight, Phone, Banknote } from 'lucide-react';
 
 interface Props {
   navigate: (page: Page, params?: Record<string, string>) => void;
+  refresh: () => void;
 }
 
-export default function DueList({ navigate }: Props) {
+export default function DueList({ navigate, refresh }: Props) {
   const dueData = useMemo(() => {
     const jobs = getJobs().filter(j => j.due > 0 && j.status !== 'cancelled');
     const customerMap: Record<string, { customerId: string; totalDue: number; jobs: typeof jobs }> = {};
@@ -35,6 +36,24 @@ export default function DueList({ navigate }: Props) {
     const message = `প্রিয় ${name},\n\nআপনার বাকি ${formatTaka(due)} টাকা পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ।`;
     const url = `https://wa.me/88${mobile}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
+  };
+
+  const handleCollectDue = (customerId: string, totalDue: number) => {
+    if (totalDue <= 0) return;
+    const amountStr = window.prompt(`বাকি আদায়ের পরিমাণ লিখুন (সর্বোচ্চ ${totalDue}):`, totalDue.toString());
+    if (amountStr) {
+      const amount = parseInt(amountStr, 10);
+      if (!isNaN(amount) && amount > 0) {
+        if (amount > totalDue) {
+          alert('মোট বাকির চেয়ে বেশি পরিমাণ দেওয়া যাবে না!');
+          return;
+        }
+        payCustomerDue(customerId, amount);
+        refresh();
+      } else {
+        alert('সঠিক টাকার পরিমাণ দিন!');
+      }
+    }
   };
 
   return (
@@ -88,10 +107,17 @@ export default function DueList({ navigate }: Props) {
                 {/* Actions */}
                 <div className="flex gap-2 mt-3">
                   <button
+                    onClick={() => handleCollectDue(item.customerId, item.totalDue)}
+                    className="flex-1 py-2 bg-orange-50 text-orange-600 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
+                  >
+                    <Banknote size={12} />
+                    বাকি আদায়
+                  </button>
+                  <button
                     onClick={() => navigate('customer-detail', { customerId: item.customerId })}
                     className="flex-1 py-2 bg-gray-50 text-gray-600 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
                   >
-                    প্রোফাইল দেখুন
+                    প্রোফাইল
                   </button>
                   <button
                     onClick={() => handleWhatsAppReminder(item.customer!.mobile, item.customer!.name, item.totalDue)}

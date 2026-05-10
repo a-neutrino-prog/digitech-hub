@@ -277,6 +277,42 @@ export function completeJob(id: string): void {
   }
 }
 
+export function payCustomerDue(customerId: string, amount: number): void {
+  const jobs = getJobs();
+  // Filter and sort due jobs by oldest first (createdAt)
+  const customerDueJobs = jobs
+    .filter(j => j.customerId === customerId && j.due > 0 && j.status !== 'cancelled')
+    .sort((a, b) => a.createdAt - b.createdAt);
+
+  let remainingAmount = amount;
+
+  for (const job of customerDueJobs) {
+    if (remainingAmount <= 0) break;
+
+    const payAmount = Math.min(job.due, remainingAmount);
+    const txId = generateId();
+    
+    // Update the job object directly in the array
+    job.payments.push({ id: txId, amount: payAmount, date: Date.now(), method: 'cash' });
+    job.due = Math.max(0, job.due - payAmount);
+    remainingAmount -= payAmount;
+
+    // Create a transaction for this payment
+    addTransaction({
+      id: txId,
+      type: 'income',
+      category: 'সেবা',
+      amount: payAmount,
+      description: `বাকি আদায় - জব`,
+      date: Date.now(),
+      relatedJobId: job.id,
+    } as any);
+  }
+
+  // Save the updated jobs array
+  setItem('jobs', jobs);
+}
+
 export function addPaymentToJob(jobId: string, amount: number): void {
   const jobs = getJobs();
   const job = jobs.find(j => j.id === jobId);

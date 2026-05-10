@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
-import { getCustomerById, getJobs, deleteCustomer, formatTaka, formatDateShort, getCustomerPhoto } from '../store';
+import { getCustomerById, getJobs, deleteCustomer, formatTaka, formatDateShort, getCustomerPhoto, payCustomerDue } from '../store';
 import type { Page } from '../App';
-import { ArrowLeft, Edit, Trash2, Star, Phone, MapPin, ChevronRight, CreditCard, MessageCircle } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, Star, Phone, MapPin, ChevronRight, CreditCard, MessageCircle, Banknote } from 'lucide-react';
 
 interface Props {
   navigate: (page: Page, params?: Record<string, string>) => void;
@@ -44,6 +44,24 @@ export default function CustomerDetail({ navigate, refresh, customerId }: Props)
     const message = `প্রিয় ${customer.name},\n\nআপনার বাকি ${formatTaka(totalDue)} টাকা পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ।`;
     const url = `https://wa.me/88${customer.mobile}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
+  };
+
+  const handleCollectDue = () => {
+    if (totalDue <= 0) return;
+    const amountStr = window.prompt(`বাকি আদায়ের পরিমাণ লিখুন (সর্বোচ্চ ${totalDue}):`, totalDue.toString());
+    if (amountStr) {
+      const amount = parseInt(amountStr, 10);
+      if (!isNaN(amount) && amount > 0) {
+        if (amount > totalDue) {
+          alert('মোট বাকির চেয়ে বেশি পরিমাণ দেওয়া যাবে না!');
+          return;
+        }
+        payCustomerDue(customerId, amount);
+        refresh();
+      } else {
+        alert('সঠিক টাকার পরিমাণ দিন!');
+      }
+    }
   };
 
   const statusMap: Record<string, { label: string; class: string }> = {
@@ -134,11 +152,18 @@ export default function CustomerDetail({ navigate, refresh, customerId }: Props)
               নতুন কাজ
             </button>
             <button
+              onClick={handleCollectDue}
+              className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1"
+            >
+              <Banknote size={14} />
+              বাকি আদায়
+            </button>
+            <button
               onClick={handleWhatsAppReminder}
               className="flex-1 py-2.5 bg-green-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1"
             >
               <MessageCircle size={14} />
-              বাকির রিমাইন্ডার
+              রিমাইন্ডার
             </button>
           </div>
         </div>
