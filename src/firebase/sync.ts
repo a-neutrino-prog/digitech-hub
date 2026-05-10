@@ -140,7 +140,6 @@ function getLocalData(): Record<string, any> {
       try { data[key] = JSON.parse(raw); } catch { data[key] = raw; }
     }
   });
-  data['_localTimestamp'] = Date.now();
   return data;
 }
 
@@ -174,22 +173,32 @@ function getDeviceId(): string {
 // লোকাল ডেটা ক্লাউডে পাঠানো (debounced)
 let uploadTimer: ReturnType<typeof setTimeout> | null = null;
 let _isApplyingRemote = false; // remote update apply করার সময় re-upload ব্লক
+let _initialSyncDone = false;
 
 export async function uploadToCloud(): Promise<boolean> {
   if (_isApplyingRemote) return true; // skip if applying remote
   if (!isFirebaseReady() || !currentUser) return false;
+  
+  if (!_initialSyncDone && !localStorage.getItem('_localSyncCheck')) {
+    console.log('[Sync] Skipping upload because initial sync is not done');
+    return false;
+  }
+
   const db = getDb();
   if (!db) return false;
 
   try {
     const data = getLocalData();
     const docRef = doc(db, 'users', currentUser.uid);
+    const now = Date.now();
     await setDoc(docRef, {
       ...data,
+      _localTimestamp: now,
       _updatedAt: serverTimestamp(),
       _deviceId: getDeviceId(),
     }, { merge: true });
     setLastSyncTime();
+    localStorage.setItem('_localSyncCheck', now.toString());
     return true;
   } catch (e) {
     console.error('[Sync] Upload error:', e);
@@ -246,28 +255,34 @@ export async function fullSync(): Promise<SyncStatus> {
   try {
     const docRef = doc(db, 'users', currentUser.uid);
     const snapshot = await getDoc(docRef);
+    _initialSyncDone = true;
+    
     const localData = getLocalData();
-    const localTimestamp = localData['_localTimestamp'] || 0;
+    const localLastModified = parseInt(localStorage.getItem('_localLastModified') || '0');
 
     if (snapshot.exists()) {
       const cloudData = snapshot.data();
       const cloudTimestamp = cloudData['_localTimestamp'] || 0;
 
-      if (cloudTimestamp > localTimestamp) {
+      if (cloudTimestamp > localLastModified) {
         _isApplyingRemote = true;
         setLocalData(cloudData);
         setLastSyncTime();
+        localStorage.setItem('_localSyncCheck', cloudTimestamp.toString());
         _isApplyingRemote = false;
         return 'success';
       }
     }
 
+    const now = Date.now();
     await setDoc(docRef, {
       ...localData,
+      _localTimestamp: now,
       _updatedAt: serverTimestamp(),
       _deviceId: getDeviceId(),
     }, { merge: true });
     setLastSyncTime();
+    localStorage.setItem('_localSyncCheck', now.toString());
     return 'success';
   } catch (e) {
     console.error('[Sync] Full sync error:', e);
@@ -292,6 +307,7 @@ export function startRealtimeSync(onRemoteUpdate: () => void): void {
 
   // onSnapshot → ক্লাউডে কোনো পরিবর্তন হলে সাথে সাথে নোটিফাই
   realtimeUnsub = onSnapshot(docRef, (snapshot) => {
+    _initialSyncDone = true;
     if (!snapshot.exists()) return;
 
     const cloudData = snapshot.data();
@@ -349,7 +365,7 @@ export function enableAutoUpload(): void {
     originalSetItem(key, value);
 
     // সিস্টেম keys ignore
-    const ignoreKeys = ['sync_last', 'device_id', 'dark_mode', 'pin_code', 'auto_sync', '_localSyncCheck'];
+    const ignoreKeys = ['sync_last', 'device_id', 'dark_mode', 'pin_code', 'auto_sync', '_localSyncCheck', '_localLastModified'];
     if (ignoreKeys.includes(key)) return;
 
     // COLLECTIONS-এর key হলে auto-upload schedule

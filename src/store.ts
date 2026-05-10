@@ -110,6 +110,7 @@ function getItem<T>(key: string, defaultValue: T): T {
 
 function setItem<T>(key: string, value: T): void {
   localStorage.setItem(key, JSON.stringify(value));
+  localStorage.setItem('_localLastModified', Date.now().toString());
 }
 
 // Default services
