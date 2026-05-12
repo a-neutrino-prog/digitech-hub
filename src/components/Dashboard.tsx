@@ -72,8 +72,8 @@ export default function Dashboard({ navigate }: Props) {
         </div>
 
         <div className={`grid gap-4 ${isDesktop ? 'grid-cols-4' : 'grid-cols-2'}`}>
-          <StatCardNew icon="💰" label="আজকের আয়" value={formatTaka(stats.todayIncome)} trend="+12%" trendUp className="income" />
-          <StatCardNew icon="📉" label="আজকের ব্যয়" value={formatTaka(stats.todayExpense)} trend="-5%" trendUp={false} className="expense" />
+          <StatCardNew icon="💰" label="আজকের আয়" value={formatTaka(stats.todayIncome)} sub={`${stats.todayJobsTotal}টি লেনদেন`} className="income" />
+          <StatCardNew icon="📉" label="আজকের ব্যয়" value={formatTaka(stats.todayExpense)} className="expense" />
           <StatCardNew icon="⚠️" label="মোট বাকি" value={formatTaka(stats.totalDue)} sub={`${topDueCustomers.length}জন গ্রাহক`} className="due" onClick={() => navigate('due-list')} />
           <StatCardNew icon="💼" label="আজকের কাজ" value={`${toBanglaNum(stats.todayJobsTotal)}টি`} sub={`পেন্ডিং ${toBanglaNum(stats.pendingJobs)} | সম্পন্ন ${toBanglaNum(stats.completedJobs)}`} className="jobs" onClick={() => navigate('jobs')} />
         </div>
