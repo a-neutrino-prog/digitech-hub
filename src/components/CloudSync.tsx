@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { isFirebaseConfigured } from '../firebase/config';
-import { initFirebase } from '../firebase/init';
 import {
   listenAuth,
   signInAnon,
@@ -48,33 +47,17 @@ export default function CloudSync({ navigate, refresh }: Props) {
 
   useEffect(() => {
     if (!configured) return;
-    initFirebase();
+    // Auth state শুধু UI update-এর জন্য (sync App.tsx থেকে হচ্ছে)
     const unsub = listenAuth((u) => {
       setUser(u);
-      if (u) {
-        // Auto start realtime if was on
-        if (localStorage.getItem('realtime_sync') === 'true') {
-          startRealtimeSync(() => { refresh(); setLastSync(Date.now()); });
-          enableAutoUpload();
-          setRealtimeOn(true);
-        }
-        if (localStorage.getItem('auto_sync') === 'true') {
-          startAutoSync();
-        }
-      }
+      setRealtimeOn(isRealtimeActive());
     });
-
     const handleOnline = () => setOnline(true);
     const handleOffline = () => setOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-
-    return () => {
-      unsub();
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [configured, refresh]);
+    return () => { unsub(); window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
+  }, [configured]);
 
   const handleSync = useCallback(async () => {
     setSyncStatus('syncing');

@@ -19,6 +19,7 @@ import ReminderForm from './components/ReminderForm';
 import CalendarView from './components/CalendarView';
 import CloudSync from './components/CloudSync';
 import { isPinEnabled, getDarkMode } from './store';
+import { initSync } from './firebase/sync';
 
 export type Page =
   | 'dashboard'
@@ -51,16 +52,27 @@ export default function App() {
   const [locked, setLocked] = useState(isPinEnabled());
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // Init dark mode + online status
+  // Init dark mode + online status + Firebase sync
   useEffect(() => {
-    if (getDarkMode()) {
-      document.documentElement.classList.add('dark');
-    }
+    if (getDarkMode()) document.documentElement.classList.add('dark');
+
+    // Online/Offline
     const goOnline = () => setIsOnline(true);
     const goOffline = () => setIsOnline(false);
     window.addEventListener('online', goOnline);
     window.addEventListener('offline', goOffline);
-    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
+
+    // Firebase global init — App load হলেই sync শুরু হবে
+    const unsubSync = initSync(() => {
+      // Cloud থেকে ডেটা আসলে UI refresh
+      setRefreshKey(k => k + 1);
+    });
+
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+      unsubSync();
+    };
   }, []);
 
   const navigate = useCallback((page: Page, params?: Record<string, string>) => {
