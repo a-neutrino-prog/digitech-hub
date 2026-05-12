@@ -49,12 +49,18 @@ export default function App() {
   const [fabOpen, setFabOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [locked, setLocked] = useState(isPinEnabled());
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
 
-  // Init dark mode
+  // Init dark mode + online status
   useEffect(() => {
     if (getDarkMode()) {
       document.documentElement.classList.add('dark');
     }
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => { window.removeEventListener('online', goOnline); window.removeEventListener('offline', goOffline); };
   }, []);
 
   const navigate = useCallback((page: Page, params?: Record<string, string>) => {
@@ -114,6 +120,13 @@ export default function App() {
   };
 
   return (
+    <>
+      {/* Offline Indicator */}
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 z-[9998] bg-warning text-white text-center py-2 text-xs font-semibold fade-in" style={{ fontFamily: "'Noto Sans Bengali', sans-serif" }}>
+          📴 অফলাইন — ইন্টারনেট সংযোগ নেই। ডেটা লোকালে সেভ হচ্ছে।
+        </div>
+      )}
     <ResponsiveLayout
       currentPage={nav.page}
       navigate={navigate}
@@ -122,5 +135,6 @@ export default function App() {
     >
       {renderPage()}
     </ResponsiveLayout>
+    </>
   );
 }

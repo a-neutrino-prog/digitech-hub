@@ -63,11 +63,11 @@ export default function Settings({ navigate, refresh }: Props) {
       const reader = new FileReader();
       reader.onload = (ev) => {
         const result = importBackup(ev.target?.result as string);
-        if (result) {
+        if (result.success) {
           toast.success('ব্যাকআপ রিস্টোর হয়েছে!');
           window.location.reload();
         } else {
-          toast.error('ব্যাকআপ ফাইল সঠিক নয়!');
+          toast.error(result.error || 'ব্যাকআপ ফাইল সঠিক নয়!');
         }
       };
       reader.readAsText(file);

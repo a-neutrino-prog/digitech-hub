@@ -291,8 +291,12 @@ export function addPaymentToJob(jobId: string, amount: number): void {
   }
 }
 
+// #7 Fix: Job delete হলে linked transactions-ও delete
 export function deleteJob(id: string): void {
   setItem('jobs', getJobs().filter(j => j.id !== id));
+  // Related transactions remove
+  const txs = getTransactions().filter(t => t.relatedJobId !== id);
+  setItem('transactions', txs);
 }
 
 export function deletePaymentFromJob(jobId: string, paymentIndex: number): void {
@@ -435,9 +439,22 @@ export function exportBackup(): string {
   }, null, 2);
 }
 
-export function importBackup(jsonStr: string): boolean {
+export function importBackup(jsonStr: string): { success: boolean; error?: string } {
   try {
     const data = JSON.parse(jsonStr);
+
+    // Schema validation
+    if (!data || typeof data !== 'object') return { success: false, error: 'সঠিক JSON নয়' };
+    const arrays = ['customers', 'jobs', 'transactions', 'services', 'notifications', 'reminders'];
+    for (const key of arrays) {
+      if (data[key] && !Array.isArray(data[key])) return { success: false, error: `"${key}" সঠিক ফরম্যাটে নেই` };
+    }
+    if (data.customers) {
+      for (const c of data.customers) {
+        if (!c.id || !c.name) return { success: false, error: 'গ্রাহক ডেটা corrupt' };
+      }
+    }
+
     if (data.customers) setItem('customers', data.customers);
     if (data.services) setItem('services', data.services);
     if (data.jobs) setItem('jobs', data.jobs);
@@ -445,8 +462,8 @@ export function importBackup(jsonStr: string): boolean {
     if (data.shopInfo) setItem('shopInfo', data.shopInfo);
     if (data.notifications) setItem('notifications', data.notifications);
     if (data.reminders) setItem('reminders', data.reminders);
-    return true;
-  } catch { return false; }
+    return { success: true };
+  } catch (e: any) { return { success: false, error: e.message || 'ফাইল পড়া যায়নি' }; }
 }
 
 export function clearAllData(): void {

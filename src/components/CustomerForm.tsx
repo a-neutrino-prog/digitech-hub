@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { addCustomer, updateCustomer, getCustomers, setCustomerPhoto, getCustomerPhoto } from '../store';
 import { useToast } from '../hooks/useToast';
+import { cleanText, isValidMobile, isValidNID } from '../utils/sanitize';
 import type { Page } from '../App';
 import { ArrowLeft, Save, User, Camera, X } from 'lucide-react';
 
@@ -49,28 +50,26 @@ export default function CustomerForm({ navigate, refresh, editId }: Props) {
   };
 
   const handleSave = () => {
-    if (!name.trim()) {
-      toast.error('গ্রাহকের নাম লিখুন');
-      return;
-    }
-    if (!mobile.trim()) {
-      toast.error('মোবাইল নম্বর লিখুন');
-      return;
-    }
+    const cleanName = cleanText(name);
+    const cleanMobile = mobile.trim();
+    const cleanAddress = cleanText(address);
+    const cleanNid = nid.trim();
+
+    if (!cleanName) { toast.error('গ্রাহকের নাম লিখুন'); return; }
+    if (!cleanMobile) { toast.error('মোবাইল নম্বর লিখুন'); return; }
+    if (!isValidMobile(cleanMobile)) { toast.error('সঠিক মোবাইল নম্বর দিন (01XXXXXXXXX)'); return; }
+    if (cleanNid && !isValidNID(cleanNid)) { toast.error('NID শুধু সংখ্যা হবে (১০ বা ১৭ ডিজিট)'); return; }
 
     const customers = getCustomers();
-    const duplicate = customers.find(c => c.mobile === mobile.trim() && c.id !== editId);
-    if (duplicate) {
-      toast.error('এই মোবাইল নম্বর ইতিমধ্যে আছে!');
-      return;
-    }
+    const duplicate = customers.find(c => c.mobile === cleanMobile && c.id !== editId);
+    if (duplicate) { toast.error('এই মোবাইল নম্বর ইতিমধ্যে আছে!'); return; }
 
     if (editId) {
-      updateCustomer(editId, { name: name.trim(), mobile: mobile.trim(), address: address.trim(), nid: nid.trim(), isRegular });
+      updateCustomer(editId, { name: cleanName, mobile: cleanMobile, address: cleanAddress, nid: cleanNid, isRegular });
       if (photo) setCustomerPhoto(editId, photo);
       toast.success('গ্রাহক আপডেট হয়েছে');
     } else {
-      const newCustomer = addCustomer({ name: name.trim(), mobile: mobile.trim(), address: address.trim(), nid: nid.trim(), isRegular });
+      const newCustomer = addCustomer({ name: cleanName, mobile: cleanMobile, address: cleanAddress, nid: cleanNid, isRegular });
       if (photo) setCustomerPhoto(newCustomer.id, photo);
       toast.success('গ্রাহক যোগ হয়েছে');
     }
