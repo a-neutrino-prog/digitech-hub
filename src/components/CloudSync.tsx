@@ -5,6 +5,7 @@ import {
   listenAuth,
   signInAnon,
   signInEmail,
+  registerEmail,
   signInWithGoogle,
   signOut,
   fullSync,
@@ -20,6 +21,7 @@ import {
   getCurrentUser,
   type SyncStatus,
 } from '../firebase/sync';
+import { useConfirm } from '../hooks/useConfirm';
 import type { Page } from '../App';
 import { ArrowLeft, Cloud, RefreshCw, Upload, Download, LogOut, User, Mail, Key, Check, AlertCircle, Wifi, WifiOff, Settings, Radio, Zap } from 'lucide-react';
 
@@ -29,6 +31,7 @@ interface Props {
 }
 
 export default function CloudSync({ navigate, refresh }: Props) {
+  const cfm = useConfirm();
   const configured = isFirebaseConfigured();
   const [user, setUser] = useState(getCurrentUser());
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle');
@@ -39,6 +42,7 @@ export default function CloudSync({ navigate, refresh }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
 
@@ -90,12 +94,13 @@ export default function CloudSync({ navigate, refresh }: Props) {
   };
 
   const handleDownload = async () => {
-    if (!confirm('ক্লাউড ডেটা ডাউনলোড করলে লোকাল ডেটা প্রতিস্থাপিত হবে।')) return;
+    const confirmed = await cfm({ title: 'ক্লাউড থেকে ডাউনলোড', message: 'ক্লাউড ডেটা ডাউনলোড করলে লোকাল ডেটা প্রতিস্থাপিত হবে। চালিয়ে যেতে চান?', confirmText: 'ডাউনলোড করুন' });
+    if (!confirmed) return;
     setSyncStatus('syncing');
-    const ok = await downloadFromCloud();
-    setSyncStatus(ok ? 'success' : 'error');
+    const success = await downloadFromCloud();
+    setSyncStatus(success ? 'success' : 'error');
     setLastSync(getLastSyncTime());
-    if (ok) refresh();
+    if (success) refresh();
     setTimeout(() => setSyncStatus(realtimeOn ? 'realtime' : 'idle'), 3000);
   };
 
@@ -120,10 +125,12 @@ export default function CloudSync({ navigate, refresh }: Props) {
     if (!email || !password) { setLoginError('ইমেইল ও পাসওয়ার্ড দিন'); return; }
     setLoginLoading(true);
     setLoginError('');
-    const { user: u, error } = await signInEmail(email, password);
+    // Bug #9 Fix: আলাদা login ও register
+    const fn = isRegisterMode ? registerEmail : signInEmail;
+    const { user: u, error } = await fn(email, password);
     setLoginLoading(false);
     if (u) { setUser(u); setShowLogin(false); handleSync(); }
-    else { setLoginError(error || 'লগইন ব্যর্থ'); }
+    else { setLoginError(error || 'ব্যর্থ'); }
   };
 
   const handleSignOut = async () => {
@@ -303,7 +310,13 @@ export default function CloudSync({ navigate, refresh }: Props) {
                 {loginError && <p className="text-xs text-red-500">{loginError}</p>}
                 <button onClick={handleEmailLogin} disabled={loginLoading}
                   className="w-full py-2.5 bg-green-500 text-white rounded-xl font-medium text-sm disabled:opacity-50">
-                  {loginLoading ? 'অপেক্ষা করুন...' : 'লগইন / অ্যাকাউন্ট তৈরি'}
+                  {loginLoading ? 'অপেক্ষা করুন...' : isRegisterMode ? 'অ্যাকাউন্ট তৈরি করুন' : 'লগইন করুন'}
+                </button>
+                <button
+                  onClick={() => { setIsRegisterMode(!isRegisterMode); setLoginError(''); }}
+                  className="w-full text-center text-xs text-primary mt-1"
+                >
+                  {isRegisterMode ? 'ইতিমধ্যে অ্যাকাউন্ট আছে? লগইন করুন' : 'নতুন অ্যাকাউন্ট তৈরি করুন'}
                 </button>
               </div>
             )}

@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
-import { getCustomerById, getJobs, deleteCustomer, formatTaka, formatDateShort, getCustomerPhoto, payCustomerDue } from '../store';
+import { getCustomerById, getJobs, deleteCustomer, formatTaka, formatDateShort, getCustomerPhoto } from '../store';
+import { useConfirm } from '../hooks/useConfirm';
+import { useToast } from '../hooks/useToast';
 import type { Page } from '../App';
-import { ArrowLeft, Edit, Trash2, Star, Phone, MapPin, ChevronRight, CreditCard, MessageCircle, Banknote } from 'lucide-react';
-import DuePaymentModal from './DuePaymentModal';
+import { ArrowLeft, Edit, Trash2, Star, Phone, MapPin, ChevronRight, CreditCard, MessageCircle } from 'lucide-react';
 
 interface Props {
   navigate: (page: Page, params?: Record<string, string>) => void;
@@ -11,9 +12,10 @@ interface Props {
 }
 
 export default function CustomerDetail({ navigate, refresh, customerId }: Props) {
+  const cfm = useConfirm();
+  const { toast } = useToast();
   const customer = getCustomerById(customerId);
   const [activeTab, setActiveTab] = useState<'history' | 'due' | 'info'>('history');
-  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
   const customerJobs = useMemo(() => {
     return getJobs()
@@ -33,12 +35,9 @@ export default function CustomerDetail({ navigate, refresh, customerId }: Props)
     );
   }
 
-  const handleDelete = () => {
-    if (confirm('এই গ্রাহক ডিলিট করতে চান? সম্পর্কিত সব তথ্য মুছে যাবে।')) {
-      deleteCustomer(customerId);
-      refresh();
-      navigate('customers');
-    }
+  const handleDelete = async () => {
+    const ok = await cfm({ title: 'গ্রাহক ডিলিট', message: 'এই গ্রাহক ডিলিট করতে চান? সম্পর্কিত সব তথ্য মুছে যাবে।', danger: true, confirmText: 'ডিলিট' });
+    if (ok) { deleteCustomer(customerId); refresh(); navigate('customers'); toast.success('গ্রাহক ডিলিট হয়েছে'); }
   };
 
   const handleWhatsAppReminder = () => {
@@ -46,16 +45,6 @@ export default function CustomerDetail({ navigate, refresh, customerId }: Props)
     const message = `প্রিয় ${customer.name},\n\nআপনার বাকি ${formatTaka(totalDue)} টাকা পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ।`;
     const url = `https://wa.me/88${customer.mobile}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
-  };
-
-  const handleCollectDueClick = () => {
-    if (totalDue <= 0) return;
-    setIsPaymentModalOpen(true);
-  };
-
-  const handleDuePayment = (amount: number) => {
-    payCustomerDue(customerId, amount);
-    refresh();
   };
 
   const statusMap: Record<string, { label: string; class: string }> = {
@@ -146,18 +135,11 @@ export default function CustomerDetail({ navigate, refresh, customerId }: Props)
               নতুন কাজ
             </button>
             <button
-              onClick={handleCollectDueClick}
-              className="flex-1 py-2.5 bg-orange-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1"
-            >
-              <Banknote size={14} />
-              বাকি আদায়
-            </button>
-            <button
               onClick={handleWhatsAppReminder}
               className="flex-1 py-2.5 bg-green-500 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1"
             >
               <MessageCircle size={14} />
-              রিমাইন্ডার
+              বাকির রিমাইন্ডার
             </button>
           </div>
         </div>
@@ -321,14 +303,6 @@ export default function CustomerDetail({ navigate, refresh, customerId }: Props)
           )}
         </div>
       </div>
-
-      <DuePaymentModal
-        isOpen={isPaymentModalOpen}
-        onClose={() => setIsPaymentModalOpen(false)}
-        onSubmit={handleDuePayment}
-        maxAmount={totalDue}
-        customerName={customer.name}
-      />
     </div>
   );
 }

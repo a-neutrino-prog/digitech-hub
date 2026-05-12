@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
 import { getReminders, deleteReminder, completeReminder, getCustomerById, formatDate } from '../store';
+import { useConfirm } from '../hooks/useConfirm';
+import { useToast } from '../hooks/useToast';
 import type { Page } from '../App';
 import { ArrowLeft, Plus, Check, Trash2, Edit, Bell, Calendar, Clock } from 'lucide-react';
 
@@ -15,6 +17,8 @@ const TYPE_INFO: Record<string, { icon: string; color: string; label: string }> 
 };
 
 export default function ReminderList({ navigate }: Props) {
+  const cfm = useConfirm();
+  const { toast } = useToast();
   const [filter, setFilter] = useState<'active' | 'completed' | 'all'>('active');
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -76,11 +80,9 @@ export default function ReminderList({ navigate }: Props) {
     setRefreshKey(k => k + 1);
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('এই রিমাইন্ডার ডিলিট করতে চান?')) {
-      deleteReminder(id);
-      setRefreshKey(k => k + 1);
-    }
+  const handleDelete = async (id: string) => {
+    const ok = await cfm({ title: 'রিমাইন্ডার ডিলিট', message: 'এই রিমাইন্ডার ডিলিট করতে চান?', danger: true, confirmText: 'ডিলিট' });
+    if (ok) { deleteReminder(id); setRefreshKey(k => k + 1); toast.success('রিমাইন্ডার ডিলিট হয়েছে'); }
   };
 
   const formatTime = (time: string) => {

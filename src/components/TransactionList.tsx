@@ -1,5 +1,7 @@
 import { useState, useMemo } from 'react';
 import { getTransactions, deleteTransaction, formatTaka, formatDateShort } from '../store';
+import { useConfirm } from '../hooks/useConfirm';
+import { useToast } from '../hooks/useToast';
 import type { Page } from '../App';
 import { ArrowLeft, Plus, Trash2, Edit, TrendingUp, TrendingDown } from 'lucide-react';
 
@@ -8,6 +10,8 @@ interface Props {
 }
 
 export default function TransactionList({ navigate }: Props) {
+  const cfm = useConfirm();
+  const { toast } = useToast();
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all');
   const transactions = useMemo(() => getTransactions().sort((a, b) => b.date - a.date), []);
 
@@ -20,11 +24,9 @@ export default function TransactionList({ navigate }: Props) {
   const totalExpense = transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const profit = totalIncome - totalExpense;
 
-  const handleDelete = (id: string) => {
-    if (confirm('এই হিসাব ডিলিট করতে চান?')) {
-      deleteTransaction(id);
-      window.location.reload();
-    }
+  const handleDelete = async (id: string) => {
+    const ok = await cfm({ title: 'হিসাব ডিলিট', message: 'এই হিসাব ডিলিট করতে চান?', danger: true, confirmText: 'ডিলিট' });
+    if (ok) { deleteTransaction(id); toast.success('হিসাব ডিলিট হয়েছে'); window.location.reload(); }
   };
 
   return (
@@ -125,31 +127,20 @@ export default function TransactionList({ navigate }: Props) {
                   )}
                   <p className="text-[10px] text-gray-300 mt-0.5">{formatDateShort(tx.date)}</p>
                 </div>
-                {tx.relatedJobId ? (
-                  <div className="flex items-center justify-center h-full">
-                    <button
-                      onClick={() => navigate('job-detail', { jobId: tx.relatedJobId! })}
-                      className="text-[10px] text-blue-600 font-medium bg-blue-50 px-2.5 py-1.5 rounded-lg border border-blue-100"
-                    >
-                      জব দেখুন
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-1">
-                    <button
-                      onClick={() => navigate('transaction-form', { editId: tx.id })}
-                      className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center hover:bg-gray-100"
-                    >
-                      <Edit size={12} className="text-gray-500" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(tx.id)}
-                      className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center hover:bg-red-100"
-                    >
-                      <Trash2 size={12} className="text-red-500" />
-                    </button>
-                  </div>
-                )}
+                <div className="flex flex-col gap-1">
+                  <button
+                    onClick={() => navigate('transaction-form', { editId: tx.id })}
+                    className="w-7 h-7 rounded-lg bg-gray-50 flex items-center justify-center"
+                  >
+                    <Edit size={12} className="text-gray-400" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(tx.id)}
+                    className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center"
+                  >
+                    <Trash2 size={12} className="text-red-400" />
+                  </button>
+                </div>
               </div>
             </div>
           ))

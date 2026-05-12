@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { getShopInfo, updateShopInfo, getServices, addService, updateService, deleteService, exportBackup, importBackup, clearAllData, isPinEnabled, setPinCode, removePinCode, exportJobsCSV, exportTransactionsCSV, exportCustomersCSV } from '../store';
 import { useDarkMode } from '../hooks/useDarkMode';
+import { useToast } from '../hooks/useToast';
+import { useConfirm } from '../hooks/useConfirm';
 import type { Page } from '../App';
 import { ArrowLeft, Save, Download, Upload, Trash2, Plus, Edit, X, Moon, Sun, FileSpreadsheet, Shield } from 'lucide-react';
 
@@ -10,6 +12,8 @@ interface Props {
 }
 
 export default function Settings({ navigate, refresh }: Props) {
+  const { toast } = useToast();
+  const confirm = useConfirm();
   const shopInfo = getShopInfo();
   const [shopName, setShopName] = useState(shopInfo.shopName);
   const [ownerName, setOwnerName] = useState(shopInfo.ownerName);
@@ -34,7 +38,7 @@ export default function Settings({ navigate, refresh }: Props) {
 
   const handleSaveShopInfo = () => {
     updateShopInfo({ shopName, ownerName, phone, address });
-    alert('দোকানের তথ্য সেভ করা হয়েছে!');
+    toast.success('দোকানের তথ্য সেভ হয়েছে!');
     refresh();
   };
 
@@ -60,10 +64,10 @@ export default function Settings({ navigate, refresh }: Props) {
       reader.onload = (ev) => {
         const result = importBackup(ev.target?.result as string);
         if (result) {
-          alert('ব্যাকআপ সফলভাবে রিস্টোর করা হয়েছে!');
+          toast.success('ব্যাকআপ রিস্টোর হয়েছে!');
           window.location.reload();
         } else {
-          alert('ব্যাকআপ ফাইল সঠিক নয়!');
+          toast.error('ব্যাকআপ ফাইল সঠিক নয়!');
         }
       };
       reader.readAsText(file);
@@ -71,13 +75,9 @@ export default function Settings({ navigate, refresh }: Props) {
     input.click();
   };
 
-  const handleClearData = () => {
-    if (confirm('⚠️ সতর্কতা: সব ডেটা মুছে যাবে! আপনি কি নিশ্চিত?')) {
-      if (confirm('আবারও নিশ্চিত করুন - সব ডেটা ডিলিট হবে!')) {
-        clearAllData();
-        window.location.reload();
-      }
-    }
+  const handleClearData = async () => {
+    const ok = await confirm({ title: 'সব ডেটা মুছবে!', message: 'সতর্কতা: সব ডেটা স্থায়ীভাবে মুছে ফেলা হবে। এটি ফেরানো যাবে না।', danger: true, confirmText: 'সব মুছুন' });
+    if (ok) { clearAllData(); window.location.reload(); }
   };
 
   const handleAddService = () => {
@@ -94,36 +94,32 @@ export default function Settings({ navigate, refresh }: Props) {
     setServicesState(getServices());
   };
 
-  const handleDeleteService = (id: string) => {
-    if (confirm('এই সেবা ডিলিট করতে চান?')) {
-      deleteService(id);
-      setServicesState(getServices());
-    }
+  const handleDeleteService = async (id: string) => {
+    const ok = await confirm({ title: 'সেবা ডিলিট', message: 'এই সেবা ডিলিট করতে চান?', danger: true, confirmText: 'ডিলিট' });
+    if (ok) { deleteService(id); setServicesState(getServices()); toast.success('সেবা ডিলিট হয়েছে'); }
   };
 
-  // PIN Handlers
-  const handleSetPin = () => {
+  // PIN Handlers (async for hashing)
+  const handleSetPin = async () => {
     if (newPin.length !== 4 || !/^\d{4}$/.test(newPin)) {
-      alert('৪ সংখ্যার PIN দিন');
+      toast.error('৪ সংখ্যার PIN দিন');
       return;
     }
     if (newPin !== confirmPin) {
-      alert('PIN মিলছে না!');
+      toast.error('PIN মিলছে না!');
       return;
     }
-    setPinCode(newPin);
+    await setPinCode(newPin);
     setPinEnabled(true);
     setShowPinSetup(false);
     setNewPin('');
     setConfirmPin('');
-    alert('PIN সেট করা হয়েছে!');
+    toast.success('PIN সেট করা হয়েছে!');
   };
 
-  const handleRemovePin = () => {
-    if (confirm('PIN লক বন্ধ করতে চান?')) {
-      removePinCode();
-      setPinEnabled(false);
-    }
+  const handleRemovePin = async () => {
+    const ok = await confirm({ title: 'PIN বন্ধ', message: 'PIN লক বন্ধ করতে চান?', confirmText: 'বন্ধ করুন' });
+    if (ok) { removePinCode(); setPinEnabled(false); toast.success('PIN বন্ধ হয়েছে'); }
   };
 
   // CSV Export

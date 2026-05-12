@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { getDashboardStats, getJobs, getNotifications, getShopInfo, getCustomerById, getUpcomingReminders, formatTaka, toBanglaNum, isToday, getTodayStart, getTodayEnd, type Job } from '../store';
 import type { Page } from '../App';
 import useResponsive from '../hooks/useResponsive';
-import { Bell, Settings, TrendingUp, TrendingDown, Clock, CheckCircle, AlertTriangle, ChevronRight, List, AlertCircle, Briefcase, Users, PieChart } from 'lucide-react';
+import { getGreeting, getGreetingEmoji } from '../utils/greeting';
+import { Bell, Settings, Clock, ChevronRight, List, AlertCircle, Briefcase, Users, PieChart, Calendar } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 
 interface Props {
@@ -18,708 +19,336 @@ export default function Dashboard({ navigate }: Props) {
 
   useEffect(() => {
     setStats(getDashboardStats());
-    const jobs = getJobs().filter(j => isToday(j.date)).sort((a, b) => b.createdAt - a.createdAt);
-    setTodayJobs(jobs);
+    setTodayJobs(getJobs().filter(j => isToday(j.date)).sort((a, b) => b.createdAt - a.createdAt));
     setUnreadCount(getNotifications().filter(n => !n.read).length);
   }, []);
 
-  // সেবা-wise আজকের আয়
   const serviceWiseIncome = useMemo(() => {
-    const todayStart = getTodayStart();
-    const todayEnd = getTodayEnd();
+    const todayStart = getTodayStart(), todayEnd = getTodayEnd();
     const jobs = getJobs().filter(j => j.date >= todayStart && j.date <= todayEnd && j.status !== 'cancelled');
-    
     const map: Record<string, number> = {};
-    jobs.forEach(job => {
-      job.services.forEach(s => {
-        map[s.serviceName] = (map[s.serviceName] || 0) + s.total;
-      });
-    });
-
-    return Object.entries(map)
-      .map(([name, amount]) => ({ 
-        name: name.length > 8 ? name.slice(0, 8) + '..' : name, 
-        fullName: name,
-        amount 
-      }))
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 6);
+    jobs.forEach(job => job.services.forEach(s => { map[s.serviceName] = (map[s.serviceName] || 0) + s.total; }));
+    return Object.entries(map).map(([name, amount]) => ({ name: name.length > 8 ? name.slice(0, 8) + '..' : name, fullName: name, amount })).sort((a, b) => b.amount - a.amount).slice(0, 6);
   }, []);
 
-  // বাকি তালিকা
   const topDueCustomers = useMemo(() => {
     const jobs = getJobs().filter(j => j.due > 0 && j.status !== 'cancelled');
     const map: Record<string, number> = {};
-    jobs.forEach(j => {
-      map[j.customerId] = (map[j.customerId] || 0) + j.due;
-    });
-    return Object.entries(map)
-      .map(([customerId, due]) => ({
-        customer: getCustomerById(customerId),
-        due
-      }))
-      .filter(x => x.customer)
-      .sort((a, b) => b.due - a.due)
-      .slice(0, 5);
+    jobs.forEach(j => { map[j.customerId] = (map[j.customerId] || 0) + j.due; });
+    return Object.entries(map).map(([id, due]) => ({ customer: getCustomerById(id), due })).filter(x => x.customer).sort((a, b) => b.due - a.due).slice(0, 5);
   }, []);
 
-  // Weekly trend for desktop
   const weeklyTrend = useMemo(() => {
-    const days: { date: string; income: number; expense: number }[] = [];
+    const days: { date: string; income: number }[] = [];
     for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      const dayStart = d.getTime();
-      const dayEnd = dayStart + 24 * 60 * 60 * 1000 - 1;
-      
-      const dayJobs = getJobs().filter(j => j.date >= dayStart && j.date <= dayEnd && j.status !== 'cancelled');
-      const income = dayJobs.reduce((sum, j) => sum + j.totalAmount - j.due, 0);
-      
-      days.push({
-        date: d.toLocaleDateString('bn-BD', { weekday: 'short' }),
-        income,
-        expense: 0,
-      });
+      const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0,0,0,0);
+      const dayJobs = getJobs().filter(j => j.date >= d.getTime() && j.date < d.getTime() + 86400000 && j.status !== 'cancelled');
+      days.push({ date: d.toLocaleDateString('bn-BD', { weekday: 'short' }), income: dayJobs.reduce((s, j) => s + j.totalAmount - j.due, 0) });
     }
     return days;
   }, []);
 
   const COLORS = ['#2563EB', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe'];
+  const netIncome = stats.todayIncome - stats.todayExpense;
 
-  // Desktop Layout
+  // ═══ DESKTOP ═══
   if (!isMobile) {
     return (
       <div className="space-y-6">
-        {/* Desktop Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">📊 ড্যাশবোর্ড</h1>
-            <p className="text-gray-500 text-sm mt-1">স্বাগতম, {shopInfo.ownerName || 'ব্যবহারকারী'}</p>
+            <p className="text-text-2 text-sm">{getGreeting()} {getGreetingEmoji()}</p>
+            <h1 className="text-2xl font-extrabold text-text-1 tracking-tight">{shopInfo.shopName || 'ডিজিটেক হাব'}</h1>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => navigate('notifications')}
-              className="relative w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center hover:shadow-md transition-all"
-            >
+            <button onClick={() => navigate('notifications')} className="relative w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center hover:shadow-md transition-all border border-gray-200" aria-label="নোটিফিকেশন">
               <Bell size={20} className="text-gray-600" />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-[10px] text-white font-bold flex items-center justify-center">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
+              {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-danger rounded-full text-[10px] text-white font-bold flex items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>}
             </button>
-            <button
-              onClick={() => navigate('settings')}
-              className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center hover:shadow-md transition-all"
-            >
+            <button onClick={() => navigate('settings')} className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center hover:shadow-md transition-all border border-gray-200" aria-label="সেটিংস">
               <Settings size={20} className="text-gray-600" />
             </button>
           </div>
         </div>
 
-        {/* Stats Cards - Desktop Grid */}
         <div className={`grid gap-4 ${isDesktop ? 'grid-cols-4' : 'grid-cols-2'}`}>
-          <DesktopStatCard
-            icon={<TrendingUp size={24} />}
-            label="আজকের আয়"
-            value={formatTaka(stats.todayIncome)}
-            color="bg-green-500"
-            lightColor="bg-green-50"
-          />
-          <DesktopStatCard
-            icon={<TrendingDown size={24} />}
-            label="আজকের ব্যয়"
-            value={formatTaka(stats.todayExpense)}
-            color="bg-red-500"
-            lightColor="bg-red-50"
-          />
-          <DesktopStatCard
-            icon={<AlertTriangle size={24} />}
-            label="মোট বাকি"
-            value={formatTaka(stats.totalDue)}
-            color="bg-orange-500"
-            lightColor="bg-orange-50"
-            onClick={() => navigate('due-list')}
-          />
-          <DesktopStatCard
-            icon={<CheckCircle size={24} />}
-            label="আজকের কাজ"
-            value={`${toBanglaNum(stats.todayJobsTotal)}টি`}
-            subtitle={`পেন্ডিং ${toBanglaNum(stats.pendingJobs)} | সম্পন্ন ${toBanglaNum(stats.completedJobs)}`}
-            color="bg-blue-500"
-            lightColor="bg-blue-50"
-            onClick={() => navigate('jobs')}
-          />
+          <StatCardNew icon="💰" label="আজকের আয়" value={formatTaka(stats.todayIncome)} trend="+12%" trendUp className="income" />
+          <StatCardNew icon="📉" label="আজকের ব্যয়" value={formatTaka(stats.todayExpense)} trend="-5%" trendUp={false} className="expense" />
+          <StatCardNew icon="⚠️" label="মোট বাকি" value={formatTaka(stats.totalDue)} sub={`${topDueCustomers.length}জন গ্রাহক`} className="due" onClick={() => navigate('due-list')} />
+          <StatCardNew icon="💼" label="আজকের কাজ" value={`${toBanglaNum(stats.todayJobsTotal)}টি`} sub={`পেন্ডিং ${toBanglaNum(stats.pendingJobs)} | সম্পন্ন ${toBanglaNum(stats.completedJobs)}`} className="jobs" onClick={() => navigate('jobs')} />
         </div>
 
-        {/* Charts Row */}
         <div className={`grid gap-4 ${isDesktop ? 'grid-cols-3' : 'grid-cols-1'}`}>
-          {/* Weekly Trend */}
-          <div className="bg-white rounded-2xl shadow-sm p-5 col-span-2">
+          <div className="bg-white rounded-2xl shadow-sm p-5 col-span-2 border border-gray-200/60">
             <h3 className="text-sm font-semibold text-gray-700 mb-4">📈 সাপ্তাহিক আয়ের ট্রেন্ড</h3>
             <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={weeklyTrend}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
-                <Tooltip formatter={(value: any) => [`৳${value}`, 'আয়']} />
-                <Line type="monotone" dataKey="income" stroke="#2563EB" strokeWidth={3} dot={{ fill: '#2563EB', r: 4 }} />
-              </LineChart>
+              <LineChart data={weeklyTrend}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="date" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 12 }} /><Tooltip formatter={(v: any) => [`৳${v}`, 'আয়']} /><Line type="monotone" dataKey="income" stroke="#2563EB" strokeWidth={3} dot={{ fill: '#2563EB', r: 4 }} /></LineChart>
             </ResponsiveContainer>
           </div>
-
-          {/* Service Income */}
-          <div className="bg-white rounded-2xl shadow-sm p-5">
+          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-200/60">
             <h3 className="text-sm font-semibold text-gray-700 mb-4">📊 সেবা-wise আয়</h3>
             {serviceWiseIncome.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={serviceWiseIncome} layout="vertical">
-                  <XAxis type="number" tick={{ fontSize: 10 }} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={60} />
-                  <Tooltip formatter={(value: any) => [`৳${value}`, 'আয়']} />
-                  <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
-                    {serviceWiseIncome.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
+                <BarChart data={serviceWiseIncome} layout="vertical"><XAxis type="number" tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={60} /><Tooltip formatter={(v: any) => [`৳${v}`, 'আয়']} /><Bar dataKey="amount" radius={[0, 6, 6, 0]}>{serviceWiseIncome.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="h-[200px] flex items-center justify-center text-gray-400 text-sm">
-                আজ কোনো আয় নেই
-              </div>
-            )}
+            ) : <div className="h-[200px] flex items-center justify-center text-gray-400 text-sm">আজ কোনো আয় নেই</div>}
           </div>
         </div>
 
-        {/* Bottom Row */}
         <div className={`grid gap-4 ${isDesktop ? 'grid-cols-3' : 'grid-cols-1'}`}>
-          {/* Today's Jobs */}
-          <div className="bg-white rounded-2xl shadow-sm p-5 col-span-2">
+          <div className="bg-white rounded-2xl shadow-sm p-5 col-span-2 border border-gray-200/60">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                <Clock size={16} className="text-primary" />
-                আজকের কাজ
-              </h3>
-              <button
-                onClick={() => navigate('jobs')}
-                className="text-xs text-primary font-medium flex items-center gap-1"
-              >
-                সব দেখুন <ChevronRight size={14} />
-              </button>
+              <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2"><Clock size={16} className="text-primary" />আজকের কাজ</h3>
+              <button onClick={() => navigate('jobs')} className="text-xs text-primary font-semibold flex items-center gap-1">সব দেখুন <ChevronRight size={14} /></button>
             </div>
-            {todayJobs.length === 0 ? (
-              <div className="text-center py-8">
-                <div className="text-4xl mb-2">📝</div>
-                <p className="text-gray-400 text-sm">আজ কোনো কাজ নেই</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                {todayJobs.slice(0, 8).map(job => (
-                  <JobRow key={job.id} job={job} onClick={() => navigate('job-detail', { jobId: job.id })} />
-                ))}
-              </div>
+            {todayJobs.length === 0 ? <EmptyState icon="📝" title="আজ কোনো কাজ নেই" action="+ নতুন কাজ" onAction={() => navigate('job-form')} /> : (
+              <div className="space-y-2 max-h-[300px] overflow-y-auto">{todayJobs.slice(0, 8).map((job, i) => <JobListItem key={job.id} job={job} onClick={() => navigate('job-detail', { jobId: job.id })} index={i} />)}</div>
             )}
           </div>
-
-          {/* Due List + Reminders */}
           <div className="space-y-4">
-            {/* Due List */}
-            <div className="bg-white rounded-2xl shadow-sm p-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <AlertCircle size={16} className="text-orange-500" />
-                  বাকি তালিকা
-                </h3>
-                <button
-                  onClick={() => navigate('due-list')}
-                  className="text-xs text-primary font-medium"
-                >
-                  সব দেখুন
-                </button>
-              </div>
-              {topDueCustomers.length === 0 ? (
-                <p className="text-center text-gray-400 text-sm py-4">কোনো বাকি নেই ✅</p>
-              ) : (
-                <div className="space-y-2">
-                  {topDueCustomers.map((item, i) => (
-                    <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-xs font-bold text-orange-600">
-                          {item.customer?.name.charAt(0)}
-                        </div>
-                        <span className="text-sm text-gray-700">{item.customer?.name}</span>
-                      </div>
-                      <span className="text-sm font-bold text-orange-600">{formatTaka(item.due)}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-200/60">
+              <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-gray-700"><AlertCircle size={16} className="inline text-warning mr-1" />বাকি তালিকা</h3><button onClick={() => navigate('due-list')} className="text-xs text-primary font-medium">সব</button></div>
+              {topDueCustomers.length === 0 ? <p className="text-center text-gray-400 text-sm py-4">বাকি নেই ✅</p> : topDueCustomers.slice(0, 3).map((item, i) => (
+                <div key={i} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0"><div className="flex items-center gap-2"><div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center text-xs font-bold text-orange-600">{item.customer?.name.charAt(0)}</div><span className="text-sm text-gray-700">{item.customer?.name}</span></div><span className="text-sm font-bold text-orange-600">{formatTaka(item.due)}</span></div>
+              ))}
             </div>
-
-            {/* Upcoming Reminders */}
             <UpcomingRemindersCard navigate={navigate} />
           </div>
         </div>
 
-        {/* Quick Actions - Desktop */}
         <div className="grid grid-cols-4 gap-4">
-          <QuickActionCard
-            icon={<Briefcase size={24} />}
-            label="নতুন কাজ"
-            description="নতুন কাজ যোগ করুন"
-            color="bg-blue-500"
-            onClick={() => navigate('job-form')}
-          />
-          <QuickActionCard
-            icon={<Users size={24} />}
-            label="নতুন গ্রাহক"
-            description="গ্রাহক যোগ করুন"
-            color="bg-green-500"
-            onClick={() => navigate('customer-form')}
-          />
-          <QuickActionCard
-            icon={<PieChart size={24} />}
-            label="রিপোর্ট"
-            description="বিশ্লেষণ দেখুন"
-            color="bg-purple-500"
-            onClick={() => navigate('reports')}
-          />
-          <QuickActionCard
-            icon={<List size={24} />}
-            label="হিসাব"
-            description="আয়-ব্যয় দেখুন"
-            color="bg-cyan-500"
-            onClick={() => navigate('transaction-list')}
-          />
+          <QuickActionCard icon={<Briefcase size={22} />} label="নতুন কাজ" desc="কাজ যোগ করুন" color="bg-primary" onClick={() => navigate('job-form')} />
+          <QuickActionCard icon={<Users size={22} />} label="নতুন গ্রাহক" desc="গ্রাহক যোগ" color="bg-success" onClick={() => navigate('customer-form')} />
+          <QuickActionCard icon={<PieChart size={22} />} label="রিপোর্ট" desc="বিশ্লেষণ" color="bg-purple-500" onClick={() => navigate('reports')} />
+          <QuickActionCard icon={<Calendar size={22} />} label="ক্যালেন্ডার" desc="তারিখ ভিউ" color="bg-teal-500" onClick={() => navigate('calendar')} />
         </div>
       </div>
     );
   }
 
-  // Mobile Layout (Original)
+  // ═══ MOBILE — Premium Dashboard Header ═══
   return (
-    <div className="bg-gray-100 min-h-screen">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-primary to-blue-700 text-white px-4 pt-5 pb-8 rounded-b-3xl shadow-lg">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h1 className="text-xl font-bold tracking-tight">📱 {shopInfo.shopName || 'ডিজিটেক হাব'}</h1>
-            <p className="text-blue-100 text-xs mt-0.5">আপনার ব্যবসা, আপনার হাতের মুঠোয়</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate('notifications')}
-              className="relative w-10 h-10 rounded-full bg-white/15 flex items-center justify-center hover:bg-white/25 transition-all"
-            >
-              <Bell size={20} />
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full text-[10px] font-bold flex items-center justify-center">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => navigate('settings')}
-              className="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center hover:bg-white/25 transition-all"
-            >
-              <Settings size={20} />
-            </button>
-          </div>
-        </div>
+    <div className="bg-surface-50 min-h-screen">
+      {/* Immersive Header */}
+      <div className="relative overflow-hidden" style={{ background: 'linear-gradient(135deg, #0F172A 0%, #1E3A8A 100%)' }}>
+        <div className="absolute right-[-40px] top-[-40px] w-[200px] h-[200px] rounded-full" style={{ background: 'rgba(96,165,250,0.08)' }} />
+        <div className="absolute left-[-20px] bottom-[-60px] w-[160px] h-[160px] rounded-full" style={{ background: 'rgba(37,99,235,0.10)' }} />
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 gap-3">
-          <StatCard
-            icon={<TrendingUp size={18} />}
-            label="আজকের আয়"
-            value={formatTaka(stats.todayIncome)}
-            color="bg-green-500/20"
-            textColor="text-green-100"
-            valueColor="text-green-300"
-          />
-          <StatCard
-            icon={<TrendingDown size={18} />}
-            label="আজকের ব্যয়"
-            value={formatTaka(stats.todayExpense)}
-            color="bg-red-500/20"
-            textColor="text-red-100"
-            valueColor="text-red-300"
-          />
-          <StatCard
-            icon={<AlertTriangle size={18} />}
-            label="মোট বাকি"
-            value={formatTaka(stats.totalDue)}
-            color="bg-orange-500/20"
-            textColor="text-orange-100"
-            valueColor="text-orange-300"
-            onClick={() => navigate('due-list')}
-          />
-          <StatCard
-            icon={<CheckCircle size={18} />}
-            label="আজকের কাজ"
-            value={`${toBanglaNum(stats.todayJobsTotal)}টি`}
-            color="bg-blue-500/20"
-            textColor="text-blue-100"
-            valueColor="text-blue-200"
-            subtitle={`পেন্ডিং ${toBanglaNum(stats.pendingJobs)} | সম্পন্ন ${toBanglaNum(stats.completedJobs)}`}
-          />
+        <div className="relative z-10 px-5 pt-6 pb-10" style={{ borderRadius: '0 0 24px 24px' }}>
+          {/* Top Bar */}
+          <div className="flex items-center justify-between mb-7">
+            <div>
+              <p className="text-blue-300 text-sm">{getGreeting()} {getGreetingEmoji()}</p>
+              <h1 className="text-xl font-bold text-white tracking-tight">{shopInfo.shopName || 'ডিজিটেক হাব'}</h1>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => navigate('notifications')} className="relative w-10 h-10 rounded-xl flex items-center justify-center border border-white/12" style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }} aria-label="নোটিফিকেশন">
+                <Bell size={18} className="text-white" />
+                {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger" />}
+              </button>
+              <button onClick={() => navigate('settings')} className="w-10 h-10 rounded-xl flex items-center justify-center border border-white/12" style={{ background: 'rgba(255,255,255,0.1)' }} aria-label="সেটিংস">
+                <Settings size={18} className="text-white" />
+              </button>
+            </div>
+          </div>
+
+          {/* Net Income */}
+          <div className="mb-5">
+            <p className="text-blue-300 text-xs mb-1">আজকের নেট আয়</p>
+            <p className="text-3xl font-extrabold text-white tracking-tight">{formatTaka(netIncome)}</p>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="flex gap-2">
+            {[
+              { label: 'আয়', val: formatTaka(stats.todayIncome), color: '' },
+              { label: 'ব্যয়', val: formatTaka(stats.todayExpense), color: '' },
+              { label: 'বাকি', val: formatTaka(stats.totalDue), color: 'color: #FCD34D' },
+            ].map((s, i) => (
+              <div key={i} className="flex-1 rounded-2xl p-3 border border-white/12" style={{ background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(10px)' }}>
+                <p className="text-blue-300 text-[11px] mb-1">{s.label}</p>
+                <p className="text-lg font-bold text-white" style={s.color ? { color: '#FCD34D' } : undefined}>{s.val}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
+      {/* Stat Cards */}
+      <div className="px-4 -mt-4 grid grid-cols-2 gap-3">
+        <StatCardNew icon="💼" label="আজকের কাজ" value={`${toBanglaNum(stats.todayJobsTotal)}টি`} sub={`পেন্ডিং ${toBanglaNum(stats.pendingJobs)}`} className="jobs" onClick={() => navigate('jobs')} />
+        <StatCardNew icon="⚠️" label="মোট বাকি" value={formatTaka(stats.totalDue)} sub={`${topDueCustomers.length}জন`} className="due" onClick={() => navigate('due-list')} />
+      </div>
+
       {/* Quick Actions */}
-      <div className="px-4 -mt-4">
-        <div className="bg-white rounded-2xl shadow-md p-4">
-          <h3 className="text-sm font-semibold text-gray-500 mb-3">দ্রুত অ্যাকশন</h3>
+      <div className="px-4 mt-4">
+        <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-200/60">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">দ্রুত অ্যাকশন</p>
           <div className="grid grid-cols-4 gap-2">
-            <QuickAction icon="📋" label="নতুন কাজ" onClick={() => navigate('job-form')} color="bg-blue-50" />
-            <QuickAction icon="👤" label="নতুন গ্রাহক" onClick={() => navigate('customer-form')} color="bg-green-50" />
-            <QuickAction icon="📅" label="ক্যালেন্ডার" onClick={() => navigate('calendar')} color="bg-teal-50" />
-            <QuickAction icon="⚠️" label="বাকি তালিকা" onClick={() => navigate('due-list')} color="bg-orange-50" />
+            {[
+              { icon: '📋', label: 'নতুন কাজ', page: 'job-form' as Page, bg: 'bg-blue-50' },
+              { icon: '👤', label: 'নতুন গ্রাহক', page: 'customer-form' as Page, bg: 'bg-green-50' },
+              { icon: '📅', label: 'ক্যালেন্ডার', page: 'calendar' as Page, bg: 'bg-teal-50' },
+              { icon: '⚠️', label: 'বাকি', page: 'due-list' as Page, bg: 'bg-orange-50' },
+            ].map((a, i) => (
+              <button key={i} onClick={() => navigate(a.page)} className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-gray-50 transition-all active:scale-95" aria-label={a.label}>
+                <div className={`w-11 h-11 ${a.bg} rounded-xl flex items-center justify-center text-xl`}>{a.icon}</div>
+                <span className="text-[11px] font-medium text-gray-600 text-center leading-tight">{a.label}</span>
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
       {/* More Actions */}
-      <div className="px-4 mt-3">
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => navigate('transaction-list')} className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3 card-hover">
-            <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center">
-              <List size={20} className="text-indigo-600" />
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold text-gray-800">হিসাব দেখুন</p>
-              <p className="text-xs text-gray-400">আয়-ব্যয় তালিকা</p>
-            </div>
-          </button>
-          <button onClick={() => navigate('reminders')} className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3 card-hover">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center">
-              <span className="text-xl">⏰</span>
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold text-gray-800">রিমাইন্ডার</p>
-              <p className="text-xs text-gray-400">সময়মতো মনে করিয়ে দিন</p>
-            </div>
-          </button>
-        </div>
+      <div className="px-4 mt-3 grid grid-cols-2 gap-3">
+        <button onClick={() => navigate('transaction-list')} className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3 card-hover border border-gray-200/60">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center"><List size={20} className="text-indigo-600" /></div>
+          <div className="text-left"><p className="text-sm font-semibold text-gray-800">হিসাব</p><p className="text-[10px] text-gray-400">আয়-ব্যয়</p></div>
+        </button>
+        <button onClick={() => navigate('reminders')} className="bg-white rounded-2xl shadow-sm p-4 flex items-center gap-3 card-hover border border-gray-200/60">
+          <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center"><span className="text-xl">⏰</span></div>
+          <div className="text-left"><p className="text-sm font-semibold text-gray-800">রিমাইন্ডার</p><p className="text-[10px] text-gray-400">মনে করিয়ে দিন</p></div>
+        </button>
       </div>
 
-      {/* Upcoming Reminders */}
-      <UpcomingReminders navigate={navigate} />
+      {/* Reminders */}
+      <UpcomingRemindersMobile navigate={navigate} />
 
-      {/* Service-wise Income Chart */}
+      {/* Chart */}
       {serviceWiseIncome.length > 0 && (
         <div className="px-4 mt-4">
-          <div className="bg-white rounded-2xl shadow-sm p-4">
+          <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-200/60">
             <h3 className="text-sm font-semibold text-gray-600 mb-3">📊 আজকের সেবা-wise আয়</h3>
             <ResponsiveContainer width="100%" height={120}>
-              <BarChart data={serviceWiseIncome} layout="vertical">
-                <XAxis type="number" tick={{ fontSize: 10 }} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={50} />
-                <Tooltip formatter={(value: any) => [`৳${value}`, 'আয়']} />
-                <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
-                  {serviceWiseIncome.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
+              <BarChart data={serviceWiseIncome} layout="vertical"><XAxis type="number" tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={50} /><Tooltip formatter={(v: any) => [`৳${v}`, 'আয়']} /><Bar dataKey="amount" radius={[0, 6, 6, 0]}>{serviceWiseIncome.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
             </ResponsiveContainer>
           </div>
         </div>
       )}
 
-      {/* Top Due Customers */}
+      {/* Due Customers */}
       {topDueCustomers.length > 0 && (
         <div className="px-4 mt-3">
-          <div className="bg-white rounded-2xl shadow-sm p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-gray-600 flex items-center gap-1.5">
-                <AlertCircle size={16} className="text-orange-500" />
-                বাকি তালিকা (টপ ৩)
-              </h3>
-              <button onClick={() => navigate('due-list')} className="text-xs text-primary font-medium">সব দেখুন</button>
-            </div>
-            <div className="space-y-2">
-              {topDueCustomers.map((item, i) => (
-                <div key={i} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-orange-50 flex items-center justify-center text-xs font-bold text-orange-600">
-                      {item.customer?.name.charAt(0)}
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-gray-700">{item.customer?.name}</p>
-                      <p className="text-[10px] text-gray-400">{item.customer?.mobile}</p>
-                    </div>
-                  </div>
-                  <span className="text-sm font-bold text-orange-600">{formatTaka(item.due)}</span>
-                </div>
-              ))}
-            </div>
+          <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-200/60">
+            <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-gray-600"><AlertCircle size={14} className="inline text-orange-500 mr-1" />বাকি তালিকা</h3><button onClick={() => navigate('due-list')} className="text-xs text-primary font-medium">সব</button></div>
+            {topDueCustomers.slice(0, 3).map((item, i) => (
+              <div key={i} className="flex items-center justify-between py-2.5 border-b border-gray-100 last:border-0">
+                <div className="flex items-center gap-2.5"><div className="w-8 h-8 rounded-lg bg-orange-50 flex items-center justify-center text-xs font-bold text-orange-600">{item.customer?.name.charAt(0)}</div><div><p className="text-sm font-medium text-gray-700">{item.customer?.name}</p><p className="text-[10px] text-gray-400">{item.customer?.mobile}</p></div></div>
+                <span className="text-sm font-bold text-orange-600">{formatTaka(item.due)}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
 
       {/* Today's Jobs */}
       <div className="px-4 mt-4 mb-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-600 flex items-center gap-1.5">
-            <Clock size={16} className="text-primary" />
-            আজকের কাজ
-          </h3>
-          <button onClick={() => navigate('jobs')} className="text-xs text-primary font-medium flex items-center gap-0.5">
-            সব দেখুন <ChevronRight size={14} />
-          </button>
-        </div>
-
-        {todayJobs.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
-            <div className="text-4xl mb-2">📝</div>
-            <p className="text-gray-400 text-sm">আজ কোনো কাজ নেই</p>
-            <button onClick={() => navigate('job-form')} className="mt-3 text-primary text-sm font-semibold">
-              + নতুন কাজ যোগ করুন
-            </button>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {todayJobs.slice(0, 5).map(job => (
-              <JobCard key={job.id} job={job} onClick={() => navigate('job-detail', { jobId: job.id })} />
-            ))}
-          </div>
+        <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-gray-600 flex items-center gap-1.5"><Clock size={16} className="text-primary" />আজকের কাজ</h3><button onClick={() => navigate('jobs')} className="text-xs text-primary font-semibold flex items-center gap-0.5">সব <ChevronRight size={14} /></button></div>
+        {todayJobs.length === 0 ? <EmptyState icon="📝" title="আজ কোনো কাজ নেই" action="+ নতুন কাজ" onAction={() => navigate('job-form')} /> : (
+          <div className="space-y-2.5">{todayJobs.slice(0, 5).map((job, i) => <JobListItem key={job.id} job={job} onClick={() => navigate('job-detail', { jobId: job.id })} index={i} />)}</div>
         )}
       </div>
     </div>
   );
 }
 
-// Mobile Stat Card
-function StatCard({ icon, label, value, color, textColor, valueColor, subtitle, onClick }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  color: string;
-  textColor: string;
-  valueColor: string;
-  subtitle?: string;
-  onClick?: () => void;
+// ═══ NEW STAT CARD ═══
+function StatCardNew({ icon, label, value, trend, trendUp, sub, className = '', onClick }: {
+  icon: string; label: string; value: string; trend?: string; trendUp?: boolean; sub?: string; className?: string; onClick?: () => void;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`${color} rounded-xl p-3 backdrop-blur-sm text-left ${onClick ? 'cursor-pointer active:scale-95 transition-all' : ''}`}
-    >
-      <div className={`flex items-center gap-1.5 ${textColor} mb-1`}>
-        {icon}
-        <span className="text-xs font-medium">{label}</span>
+    <button onClick={onClick} className={`stat-card bg-white rounded-2xl border border-gray-200/60 p-5 text-left w-full ${className}`}>
+      <div className="flex items-start justify-between mb-4">
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style={{
+          background: className.includes('income') ? '#F0FDF4' : className.includes('expense') ? '#FFF1F2' : className.includes('due') ? '#FFFBEB' : '#EFF6FF'
+        }}>{icon}</div>
+        {trend && (
+          <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${trendUp ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+            {trendUp ? '↑' : '↓'} {trend}
+          </span>
+        )}
       </div>
-      <p className={`text-lg font-bold ${valueColor} number-animate`}>{value}</p>
-      {subtitle && <p className={`text-[10px] ${textColor} mt-0.5`}>{subtitle}</p>}
+      <p className="text-[13px] text-gray-500 mb-1">{label}</p>
+      <p className="text-2xl font-extrabold text-gray-900 tracking-tight">{value}</p>
+      {sub && <p className="text-[11px] text-gray-400 mt-1.5">{sub}</p>}
     </button>
   );
 }
 
-// Desktop Stat Card
-function DesktopStatCard({ icon, label, value, subtitle, color, lightColor, onClick }: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  subtitle?: string;
-  color: string;
-  lightColor: string;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`bg-white rounded-2xl shadow-sm p-5 text-left hover:shadow-md transition-all ${onClick ? 'cursor-pointer' : ''}`}
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-500">{label}</p>
-          <p className="text-2xl font-bold text-gray-800 mt-1">{value}</p>
-          {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
-        </div>
-        <div className={`w-12 h-12 rounded-xl ${lightColor} flex items-center justify-center`}>
-          <span className={`${color} text-white p-2 rounded-lg`}>{icon}</span>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-// Mobile Quick Action
-function QuickAction({ icon, label, onClick, color }: {
-  icon: string;
-  label: string;
-  onClick: () => void;
-  color: string;
-}) {
-  return (
-    <button onClick={onClick} className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-gray-50 transition-all active:scale-95">
-      <div className={`w-11 h-11 ${color} rounded-xl flex items-center justify-center text-xl`}>{icon}</div>
-      <span className="text-[11px] font-medium text-gray-600 leading-tight text-center">{label}</span>
-    </button>
-  );
-}
-
-// Desktop Quick Action Card
-function QuickActionCard({ icon, label, description, color, onClick }: {
-  icon: React.ReactNode;
-  label: string;
-  description: string;
-  color: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="bg-white rounded-2xl shadow-sm p-5 text-left hover:shadow-md transition-all flex items-center gap-4"
-    >
-      <div className={`w-12 h-12 rounded-xl ${color} flex items-center justify-center text-white`}>
-        {icon}
-      </div>
-      <div>
-        <p className="font-semibold text-gray-800">{label}</p>
-        <p className="text-xs text-gray-400">{description}</p>
-      </div>
-    </button>
-  );
-}
-
-// Mobile Job Card
-function JobCard({ job, onClick }: { job: Job; onClick: () => void }) {
+// ═══ JOB LIST ITEM — with status bar ═══
+function JobListItem({ job, onClick, index }: { job: Job; onClick: () => void; index: number }) {
   const customer = getCustomerById(job.customerId);
-  const statusMap: Record<string, { label: string; class: string }> = {
-    'pending': { label: 'পেন্ডিং', class: 'status-pending' },
-    'in-progress': { label: 'চলমান', class: 'status-in-progress' },
-    'completed': { label: 'সম্পন্ন', class: 'status-completed' },
-    'cancelled': { label: 'বাতিল', class: 'status-cancelled' },
+  const statusCfg: Record<string, { label: string; cls: string; bar: string }> = {
+    'pending': { label: 'পেন্ডিং', cls: 'status-pending', bar: 'status-bar-pending' },
+    'in-progress': { label: 'চলমান', cls: 'status-in-progress', bar: 'status-bar-in-progress' },
+    'completed': { label: 'সম্পন্ন', cls: 'status-completed', bar: 'status-bar-completed' },
+    'cancelled': { label: 'বাতিল', cls: 'status-cancelled', bar: 'status-bar-cancelled' },
   };
-  const status = statusMap[job.status];
-
+  const s = statusCfg[job.status];
   return (
-    <button onClick={onClick} className="w-full bg-white rounded-xl shadow-sm p-3.5 flex items-center gap-3 card-hover text-left">
-      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-lg">📋</div>
+    <button onClick={onClick} className={`animate-item list-item-status ${s.bar} w-full bg-white rounded-2xl border border-gray-200/60 p-4 flex items-center gap-4 text-left`} style={{ animationDelay: `${index * 50}ms` }}>
+      <div className="w-11 h-11 rounded-xl bg-primary-50 flex items-center justify-center text-primary-700 font-bold text-base flex-shrink-0">{customer?.name.charAt(0) || '?'}</div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-gray-800 truncate">{customer?.name || 'অজানা গ্রাহক'}</p>
-          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${status.class}`}>{status.label}</span>
-        </div>
-        <p className="text-xs text-gray-400 truncate mt-0.5">{job.services.map(s => s.serviceName).join(', ')}</p>
-        <div className="flex items-center justify-between mt-1">
-          <span className="text-xs font-semibold text-gray-700">{formatTaka(job.totalAmount)}</span>
-          {job.due > 0 && <span className="text-[10px] text-orange-600 font-medium">বাকি: {formatTaka(job.due)}</span>}
-        </div>
-      </div>
-      <ChevronRight size={16} className="text-gray-300 flex-shrink-0" />
-    </button>
-  );
-}
-
-// Desktop Job Row
-function JobRow({ job, onClick }: { job: Job; onClick: () => void }) {
-  const customer = getCustomerById(job.customerId);
-  const statusMap: Record<string, { label: string; class: string }> = {
-    'pending': { label: 'পেন্ডিং', class: 'status-pending' },
-    'in-progress': { label: 'চলমান', class: 'status-in-progress' },
-    'completed': { label: 'সম্পন্ন', class: 'status-completed' },
-    'cancelled': { label: 'বাতিল', class: 'status-cancelled' },
-  };
-  const status = statusMap[job.status];
-
-  return (
-    <button onClick={onClick} className="w-full flex items-center gap-4 p-3 rounded-xl hover:bg-gray-50 transition-all text-left">
-      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-lg flex-shrink-0">📋</div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-800">{customer?.name || 'অজানা গ্রাহক'}</p>
-        <p className="text-xs text-gray-400 truncate">{job.services.map(s => s.serviceName).join(', ')}</p>
+        <div className="flex items-center gap-2"><p className="text-sm font-semibold text-gray-800 truncate">{customer?.name || 'অজানা'}</p><span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${s.cls}`}>{s.label}</span></div>
+        <p className="text-xs text-gray-400 truncate mt-0.5">{job.services.map(sv => sv.serviceName).join(', ')}</p>
       </div>
       <div className="text-right flex-shrink-0">
-        <p className="text-sm font-semibold text-gray-800">{formatTaka(job.totalAmount)}</p>
-        {job.due > 0 && <p className="text-[10px] text-orange-600">বাকি: {formatTaka(job.due)}</p>}
+        <p className="text-[15px] font-bold text-gray-800">{formatTaka(job.totalAmount)}</p>
+        {job.due > 0 && <p className="text-[10px] text-orange-500 mt-0.5">বাকি {formatTaka(job.due)}</p>}
       </div>
-      <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${status.class} flex-shrink-0`}>{status.label}</span>
     </button>
   );
 }
 
-// Mobile Upcoming Reminders
-function UpcomingReminders({ navigate }: { navigate: (page: Page, params?: Record<string, string>) => void }) {
-  const reminders = getUpcomingReminders().slice(0, 3);
-  if (reminders.length === 0) return null;
-
-  const isOverdue = (date: number) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return date < today.getTime();
-  };
-
-  const formatReminderDate = (date: number) => {
-    const d = new Date(date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    
-    if (d.getTime() < today.getTime()) return 'বিলম্বিত!';
-    if (d.toDateString() === today.toDateString()) return 'আজ';
-    if (d.toDateString() === tomorrow.toDateString()) return 'আগামীকাল';
-    return d.toLocaleDateString('bn-BD', { day: 'numeric', month: 'short' });
-  };
-
+// ═══ EMPTY STATE ═══
+function EmptyState({ icon, title, action, onAction }: { icon: string; title: string; action?: string; onAction?: () => void }) {
   return (
-    <div className="px-4 mt-3">
-      <div className="bg-white rounded-2xl shadow-sm p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-600 flex items-center gap-1.5">⏰ আসন্ন রিমাইন্ডার</h3>
-          <button onClick={() => navigate('reminders')} className="text-xs text-purple-600 font-medium">সব দেখুন</button>
-        </div>
-        <div className="space-y-2">
-          {reminders.map(r => (
-            <div key={r.id} className={`flex items-center gap-3 p-2 rounded-lg ${isOverdue(r.date) ? 'bg-red-50' : 'bg-gray-50'}`}>
-              <span className="text-lg">{r.type === 'payment' ? '💰' : r.type === 'bill' ? '📄' : r.type === 'customer' ? '👤' : '📝'}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-700 truncate">{r.title}</p>
-                <p className={`text-[10px] ${isOverdue(r.date) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>
-                  {formatReminderDate(r.date)} • {r.time}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className="bg-white rounded-2xl border border-gray-200/60 p-10 text-center">
+      <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center text-4xl mx-auto mb-4 empty-illustration">{icon}</div>
+      <p className="text-gray-500 text-sm font-medium">{title}</p>
+      {action && <button onClick={onAction} className="mt-3 text-primary text-sm font-semibold">{action}</button>}
     </div>
   );
 }
 
-// Desktop Upcoming Reminders Card
-function UpcomingRemindersCard({ navigate }: { navigate: (page: Page, params?: Record<string, string>) => void }) {
-  const reminders = getUpcomingReminders().slice(0, 3);
-
+// ═══ DESKTOP QUICK ACTION ═══
+function QuickActionCard({ icon, label, desc, color, onClick }: { icon: React.ReactNode; label: string; desc: string; color: string; onClick: () => void }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-5">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-          ⏰ রিমাইন্ডার
-        </h3>
-        <button onClick={() => navigate('reminders')} className="text-xs text-purple-600 font-medium">
-          সব দেখুন
-        </button>
-      </div>
-      {reminders.length === 0 ? (
-        <p className="text-center text-gray-400 text-sm py-4">কোনো রিমাইন্ডার নেই</p>
-      ) : (
-        <div className="space-y-2">
-          {reminders.map(r => (
-            <div key={r.id} className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
-              <span className="text-sm">{r.type === 'bill' ? '📄' : r.type === 'payment' ? '💰' : '📝'}</span>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-700 truncate">{r.title}</p>
-                <p className="text-[10px] text-gray-400">{r.time}</p>
-              </div>
-            </div>
-          ))}
+    <button onClick={onClick} className="bg-white rounded-2xl shadow-sm p-5 text-left hover:shadow-md transition-all flex items-center gap-4 border border-gray-200/60">
+      <div className={`w-12 h-12 rounded-xl ${color} flex items-center justify-center text-white`}>{icon}</div>
+      <div><p className="font-semibold text-gray-800">{label}</p><p className="text-xs text-gray-400">{desc}</p></div>
+    </button>
+  );
+}
+
+// ═══ REMINDERS ═══
+function UpcomingRemindersMobile({ navigate }: { navigate: (p: Page, params?: Record<string, string>) => void }) {
+  const reminders = getUpcomingReminders().slice(0, 3);
+  if (!reminders.length) return null;
+  const isOverdue = (d: number) => { const t = new Date(); t.setHours(0,0,0,0); return d < t.getTime(); };
+  return (
+    <div className="px-4 mt-3"><div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-200/60">
+      <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-gray-600">⏰ রিমাইন্ডার</h3><button onClick={() => navigate('reminders')} className="text-xs text-purple-600 font-medium">সব</button></div>
+      <div className="space-y-2">{reminders.map(r => (
+        <div key={r.id} className={`flex items-center gap-3 p-2.5 rounded-xl ${isOverdue(r.date) ? 'bg-red-50' : 'bg-gray-50'}`}>
+          <span className="text-lg">{r.type === 'payment' ? '💰' : r.type === 'bill' ? '📄' : '📝'}</span>
+          <div className="flex-1 min-w-0"><p className="text-sm text-gray-700 truncate">{r.title}</p><p className={`text-[10px] ${isOverdue(r.date) ? 'text-red-500 font-medium' : 'text-gray-400'}`}>{r.time}</p></div>
         </div>
+      ))}</div>
+    </div></div>
+  );
+}
+
+function UpcomingRemindersCard({ navigate }: { navigate: (p: Page, params?: Record<string, string>) => void }) {
+  const reminders = getUpcomingReminders().slice(0, 3);
+  return (
+    <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-200/60">
+      <div className="flex items-center justify-between mb-3"><h3 className="text-sm font-semibold text-gray-700">⏰ রিমাইন্ডার</h3><button onClick={() => navigate('reminders')} className="text-xs text-purple-600 font-medium">সব</button></div>
+      {!reminders.length ? <p className="text-center text-gray-400 text-sm py-4">কোনো রিমাইন্ডার নেই</p> : (
+        <div className="space-y-2">{reminders.map(r => (
+          <div key={r.id} className="flex items-center gap-2 p-2.5 bg-gray-50 rounded-xl"><span className="text-sm">{r.type === 'bill' ? '📄' : r.type === 'payment' ? '💰' : '📝'}</span><div className="flex-1 min-w-0"><p className="text-xs text-gray-700 truncate">{r.title}</p><p className="text-[10px] text-gray-400">{r.time}</p></div></div>
+        ))}</div>
       )}
     </div>
   );

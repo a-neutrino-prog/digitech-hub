@@ -160,8 +160,8 @@ function MobileBottomNav({ currentPage, navigate }: {
   if (!isMainPage) return null;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-40">
-      <div className="flex items-center justify-around py-1">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 p-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}>
+      <div className="glass-nav rounded-[28px] flex items-center justify-around py-2 px-2">
         <NavItem
           icon={<Home size={22} />}
           label="হোম"

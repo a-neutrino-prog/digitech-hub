@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
 import ResponsiveLayout from './components/layout/ResponsiveLayout';
-import LoginScreen from './components/LoginScreen';
 import PinLock from './components/PinLock';
 import Dashboard from './components/Dashboard';
 import JobList from './components/JobList';
@@ -20,8 +19,6 @@ import ReminderForm from './components/ReminderForm';
 import CalendarView from './components/CalendarView';
 import CloudSync from './components/CloudSync';
 import { isPinEnabled, getDarkMode } from './store';
-import { listenAuth, getCurrentUser, startRealtimeSync, isRealtimeActive, enableAutoUpload } from './firebase/sync';
-import { isFirebaseConfigured } from './firebase/config';
 
 export type Page =
   | 'dashboard'
@@ -52,31 +49,12 @@ export default function App() {
   const [fabOpen, setFabOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [locked, setLocked] = useState(isPinEnabled());
-  const [user, setUser] = useState(getCurrentUser());
-  const [authChecking, setAuthChecking] = useState(true);
 
-  // Init dark mode and Auth
+  // Init dark mode
   useEffect(() => {
     if (getDarkMode()) {
       document.documentElement.classList.add('dark');
     }
-    
-    // Listen to Firebase Auth
-    const unsub = listenAuth((u) => {
-      setUser(u);
-      setAuthChecking(false);
-      
-      // Auto enable real-time sync for logged in users
-      if (u && !isRealtimeActive()) {
-        startRealtimeSync(() => {
-          setRefreshKey(k => k + 1);
-        });
-        enableAutoUpload();
-        localStorage.setItem('realtime_sync', 'true');
-      }
-    });
-    
-    return () => unsub();
   }, []);
 
   const navigate = useCallback((page: Page, params?: Record<string, string>) => {
@@ -88,20 +66,6 @@ export default function App() {
   const refresh = useCallback(() => {
     setRefreshKey(k => k + 1);
   }, []);
-
-  // Loading Screen
-  if (authChecking) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
-  // Mandatory Login Screen
-  if (!user && isFirebaseConfigured()) {
-    return <LoginScreen />;
-  }
 
   // PIN Lock Screen
   if (locked) {
@@ -123,7 +87,7 @@ export default function App() {
       case 'job-detail':
         return <JobDetail navigate={navigate} refresh={refresh} jobId={nav.params?.jobId || ''} />;
       case 'customer-detail':
-        return <CustomerDetail key={refreshKey} navigate={navigate} refresh={refresh} customerId={nav.params?.customerId || ''} />;
+        return <CustomerDetail navigate={navigate} refresh={refresh} customerId={nav.params?.customerId || ''} />;
       case 'transaction-form':
         return <TransactionForm navigate={navigate} refresh={refresh} editId={nav.params?.editId} />;
       case 'transaction-list':
@@ -135,7 +99,7 @@ export default function App() {
       case 'notifications':
         return <NotificationPanel navigate={navigate} />;
       case 'due-list':
-        return <DueList key={refreshKey} navigate={navigate} refresh={refresh} />;
+        return <DueList key={refreshKey} navigate={navigate} />;
       case 'reminders':
         return <ReminderList key={refreshKey} navigate={navigate} />;
       case 'reminder-form':

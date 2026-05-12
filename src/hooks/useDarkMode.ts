@@ -5,12 +5,14 @@ export function useDarkMode() {
   const [dark, setDark] = useState(getDarkMode());
 
   useEffect(() => {
-    if (dark) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', dark);
     saveDarkMode(dark);
+
+    // meta theme-color আপডেট
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+      meta.setAttribute('content', dark ? '#0F172A' : '#2563EB');
+    }
   }, [dark]);
 
   const toggle = () => setDark(!dark);

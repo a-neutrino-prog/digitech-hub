@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { addTransaction, updateTransaction, getTransactions, EXPENSE_CATEGORIES } from '../store';
+import { useToast } from '../hooks/useToast';
 import type { Page } from '../App';
 import { ArrowLeft, Save } from 'lucide-react';
 
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function TransactionForm({ navigate, refresh, editId }: Props) {
+  const { toast } = useToast();
   const existingTx = editId ? getTransactions().find(t => t.id === editId) : null;
 
   const [type, setType] = useState<'income' | 'expense'>(existingTx?.type || 'expense');
@@ -22,11 +24,11 @@ export default function TransactionForm({ navigate, refresh, editId }: Props) {
   const handleSave = () => {
     const amountNum = parseFloat(amount);
     if (!amountNum || amountNum <= 0) {
-      alert('সঠিক টাকার পরিমাণ লিখুন');
+      toast.error('সঠিক টাকার পরিমাণ লিখুন');
       return;
     }
     if (!category) {
-      alert('ক্যাটাগরি নির্বাচন করুন');
+      toast.error('ক্যাটাগরি নির্বাচন করুন');
       return;
     }
 

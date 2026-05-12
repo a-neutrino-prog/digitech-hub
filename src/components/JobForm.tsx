@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { getCustomers, getServices, addJob, getJobs, updateJob, type JobService } from '../store';
+import { useToast } from '../hooks/useToast';
 import type { Page } from '../App';
 import { ArrowLeft, Search, Plus, Minus, X, Save, Star, Percent } from 'lucide-react';
 
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function JobForm({ navigate, refresh, editId }: Props) {
+  const { toast } = useToast();
   const customers = useMemo(() => getCustomers().sort((a, b) => a.name.localeCompare(b.name)), []);
   const services = useMemo(() => getServices().filter(s => s.isActive), []);
   const existingJob = editId ? getJobs().find(j => j.id === editId) : null;
@@ -43,8 +45,7 @@ export default function JobForm({ navigate, refresh, editId }: Props) {
     : discountNum;
   const totalAmount = Math.max(0, subtotal - discountAmount);
   const advanceNum = parseFloat(advance) || 0;
-  const totalPaid = existingJob ? existingJob.payments.reduce((sum, p) => sum + p.amount, 0) : advanceNum;
-  const due = Math.max(0, totalAmount - totalPaid);
+  const due = Math.max(0, totalAmount - advanceNum);
 
   const addServiceToList = (serviceId: string) => {
     const service = services.find(s => s.id === serviceId);
@@ -93,11 +94,11 @@ export default function JobForm({ navigate, refresh, editId }: Props) {
 
   const handleSave = () => {
     if (!customerId) {
-      alert('গ্রাহক সিলেক্ট করুন');
+      toast.error('গ্রাহক সিলেক্ট করুন');
       return;
     }
     if (selectedServices.length === 0) {
-      alert('কমপক্ষে একটি সেবা যোগ করুন');
+      toast.error('কমপক্ষে একটি সেবা যোগ করুন');
       return;
     }
 
@@ -105,7 +106,7 @@ export default function JobForm({ navigate, refresh, editId }: Props) {
       customerId,
       services: selectedServices,
       totalAmount,
-      advance: existingJob ? existingJob.advance : advanceNum,
+      advance: advanceNum,
       due,
       date: existingJob?.date || Date.now(),
       status: status as 'pending' | 'in-progress' | 'completed' | 'cancelled',
@@ -360,8 +361,7 @@ export default function JobForm({ navigate, refresh, editId }: Props) {
                 type="number"
                 value={advance}
                 onChange={e => setAdvance(e.target.value)}
-                disabled={!!editId}
-                className="w-32 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:opacity-50 disabled:bg-gray-100"
+                className="w-32 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm text-right focus:outline-none focus:ring-2 focus:ring-primary/20"
                 placeholder="০"
               />
             </div>

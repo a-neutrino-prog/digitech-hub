@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { addReminder, updateReminder, getReminders, getCustomers } from '../store';
+import { useToast } from '../hooks/useToast';
 import type { Page } from '../App';
 import { ArrowLeft, Save, Calendar, Clock } from 'lucide-react';
 
@@ -27,6 +28,7 @@ const PRESET_REMINDERS = [
 export default function ReminderForm({ navigate, refresh, editId }: Props) {
   const existingReminder = editId ? getReminders().find(r => r.id === editId) : null;
   const customers = getCustomers();
+  const { toast } = useToast();
 
   const [title, setTitle] = useState(existingReminder?.title || '');
   const [description, setDescription] = useState(existingReminder?.description || '');
@@ -48,7 +50,7 @@ export default function ReminderForm({ navigate, refresh, editId }: Props) {
 
   const handleSave = () => {
     if (!title.trim()) {
-      alert('রিমাইন্ডারের শিরোনাম লিখুন');
+      toast.error('রিমাইন্ডারের শিরোনাম লিখুন');
       return;
     }
 

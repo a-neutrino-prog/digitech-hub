@@ -11,8 +11,6 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   GoogleAuthProvider,
   signOut as fbSignOut,
   onAuthStateChanged,
@@ -20,7 +18,6 @@ import {
 } from 'firebase/auth';
 import { getDb, getFirebaseAuth, isFirebaseReady } from './init';
 import { isFirebaseConfigured } from './config';
-import { clearAllData } from '../store';
 
 // ===== Auth =====
 
@@ -57,6 +54,7 @@ export async function signInAnon(): Promise<User | null> {
   }
 }
 
+// Bug #9 Fix: আলাদা login ও register ফাংশন
 export async function signInEmail(email: string, password: string): Promise<{ user: User | null; error: string | null }> {
   const auth = getFirebaseAuth();
   if (!auth) return { user: null, error: 'Firebase not configured' };
@@ -65,14 +63,29 @@ export async function signInEmail(email: string, password: string): Promise<{ us
     currentUser = result.user;
     return { user: result.user, error: null };
   } catch (e: any) {
-    if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
-      try {
-        const result = await createUserWithEmailAndPassword(auth, email, password);
-        currentUser = result.user;
-        return { user: result.user, error: null };
-      } catch (e2: any) {
-        return { user: null, error: e2.message };
-      }
+    if (e.code === 'auth/user-not-found') {
+      return { user: null, error: 'অ্যাকাউন্ট পাওয়া যায়নি। নতুন অ্যাকাউন্ট তৈরি করুন।' };
+    }
+    if (e.code === 'auth/wrong-password' || e.code === 'auth/invalid-credential') {
+      return { user: null, error: 'ভুল পাসওয়ার্ড! আবার চেষ্টা করুন।' };
+    }
+    return { user: null, error: e.message };
+  }
+}
+
+export async function registerEmail(email: string, password: string): Promise<{ user: User | null; error: string | null }> {
+  const auth = getFirebaseAuth();
+  if (!auth) return { user: null, error: 'Firebase not configured' };
+  try {
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    currentUser = result.user;
+    return { user: result.user, error: null };
+  } catch (e: any) {
+    if (e.code === 'auth/email-already-in-use') {
+      return { user: null, error: 'এই ইমেইল ইতিমধ্যে ব্যবহৃত। লগইন করুন।' };
+    }
+    if (e.code === 'auth/weak-password') {
+      return { user: null, error: 'পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।' };
     }
     return { user: null, error: e.message };
   }
@@ -87,50 +100,29 @@ export async function signInWithGoogle(): Promise<{ user: User | null; error: st
     currentUser = result.user;
     return { user: result.user, error: null };
   } catch (e: any) {
-    if (e.code === 'auth/popup-blocked') {
-      try {
-        const provider = new GoogleAuthProvider();
-        await signInWithRedirect(auth, provider);
-        return { user: null, error: null }; // wait for redirect
-      } catch (redirectError: any) {
-        return { user: null, error: redirectError.message };
-      }
-    }
     return { user: null, error: e.message };
   }
 }
 
-export async function checkRedirectResult(): Promise<{ user: User | null; error: string | null }> {
-  const auth = getFirebaseAuth();
-  if (!auth) return { user: null, error: null };
-  try {
-    const result = await getRedirectResult(auth);
-    if (result) {
-      currentUser = result.user;
-      return { user: result.user, error: null };
-    }
-    return { user: null, error: null };
-  } catch (e: any) {
-    return { user: null, error: e.message };
-  }
-}
-
+// Bug #1 Fix: signOut-এ local data মুছবে না
 export async function signOut(): Promise<void> {
   stopRealtimeSync();
   stopAutoSync();
+  disableAutoUpload();
   const auth = getFirebaseAuth();
   if (!auth) return;
   await fbSignOut(auth);
   currentUser = null;
+  // শুধু sync-related keys মুছুন, ব্যবসায়িক data রাখুন
   localStorage.removeItem('sync_last');
   localStorage.removeItem('realtime_sync');
   localStorage.removeItem('auto_sync');
-  clearAllData(); // Clear all data on sign out for multi-tenant safety
+  localStorage.removeItem('_localSyncCheck');
 }
 
 // ===== Data Collections =====
-
-const COLLECTIONS = ['customers', 'services', 'jobs', 'transactions', 'shopInfo', 'notifications', 'reminders', 'customer_photos'] as const;
+// Bug #8 Fix: customer_photos বাদ (base64 images Firestore 1MB limit hit করতে পারে)
+const COLLECTIONS = ['customers', 'services', 'jobs', 'transactions', 'shopInfo', 'notifications', 'reminders'] as const;
 
 function getLocalData(): Record<string, any> {
   const data: Record<string, any> = {};
@@ -140,6 +132,7 @@ function getLocalData(): Record<string, any> {
       try { data[key] = JSON.parse(raw); } catch { data[key] = raw; }
     }
   });
+  data['_localTimestamp'] = Date.now();
   return data;
 }
 
@@ -173,32 +166,22 @@ function getDeviceId(): string {
 // লোকাল ডেটা ক্লাউডে পাঠানো (debounced)
 let uploadTimer: ReturnType<typeof setTimeout> | null = null;
 let _isApplyingRemote = false; // remote update apply করার সময় re-upload ব্লক
-let _initialSyncDone = false;
 
 export async function uploadToCloud(): Promise<boolean> {
   if (_isApplyingRemote) return true; // skip if applying remote
   if (!isFirebaseReady() || !currentUser) return false;
-  
-  if (!_initialSyncDone && !localStorage.getItem('_localSyncCheck')) {
-    console.log('[Sync] Skipping upload because initial sync is not done');
-    return false;
-  }
-
   const db = getDb();
   if (!db) return false;
 
   try {
     const data = getLocalData();
     const docRef = doc(db, 'users', currentUser.uid);
-    const now = Date.now();
     await setDoc(docRef, {
       ...data,
-      _localTimestamp: now,
       _updatedAt: serverTimestamp(),
       _deviceId: getDeviceId(),
     }, { merge: true });
     setLastSyncTime();
-    localStorage.setItem('_localSyncCheck', now.toString());
     return true;
   } catch (e) {
     console.error('[Sync] Upload error:', e);
@@ -255,34 +238,28 @@ export async function fullSync(): Promise<SyncStatus> {
   try {
     const docRef = doc(db, 'users', currentUser.uid);
     const snapshot = await getDoc(docRef);
-    _initialSyncDone = true;
-    
     const localData = getLocalData();
-    const localLastModified = parseInt(localStorage.getItem('_localLastModified') || '0');
+    const localTimestamp = localData['_localTimestamp'] || 0;
 
     if (snapshot.exists()) {
       const cloudData = snapshot.data();
       const cloudTimestamp = cloudData['_localTimestamp'] || 0;
 
-      if (cloudTimestamp > localLastModified) {
+      if (cloudTimestamp > localTimestamp) {
         _isApplyingRemote = true;
         setLocalData(cloudData);
         setLastSyncTime();
-        localStorage.setItem('_localSyncCheck', cloudTimestamp.toString());
         _isApplyingRemote = false;
         return 'success';
       }
     }
 
-    const now = Date.now();
     await setDoc(docRef, {
       ...localData,
-      _localTimestamp: now,
       _updatedAt: serverTimestamp(),
       _deviceId: getDeviceId(),
     }, { merge: true });
     setLastSyncTime();
-    localStorage.setItem('_localSyncCheck', now.toString());
     return 'success';
   } catch (e) {
     console.error('[Sync] Full sync error:', e);
@@ -307,7 +284,6 @@ export function startRealtimeSync(onRemoteUpdate: () => void): void {
 
   // onSnapshot → ক্লাউডে কোনো পরিবর্তন হলে সাথে সাথে নোটিফাই
   realtimeUnsub = onSnapshot(docRef, (snapshot) => {
-    _initialSyncDone = true;
     if (!snapshot.exists()) return;
 
     const cloudData = snapshot.data();
@@ -351,32 +327,36 @@ export function isRealtimeActive(): boolean {
   return !!realtimeUnsub;
 }
 
-// ===== Auto-upload on localStorage change =====
+// ===== Bug #6 Fix: Auto-upload with proper restore =====
 
 let storageProxy = false;
+let _originalSetItem: ((key: string, value: string) => void) | null = null;
 
 export function enableAutoUpload(): void {
   if (storageProxy) return;
   storageProxy = true;
 
-  // localStorage.setItem কে intercept করি
-  const originalSetItem = localStorage.setItem.bind(localStorage);
-  localStorage.setItem = function (key: string, value: string) {
-    originalSetItem(key, value);
+  _originalSetItem = localStorage.setItem.bind(localStorage);
+  const origSet = _originalSetItem;
 
-    // সিস্টেম keys ignore
-    const ignoreKeys = ['sync_last', 'device_id', 'dark_mode', 'pin_code', 'auto_sync', '_localSyncCheck', '_localLastModified'];
+  localStorage.setItem = function (key: string, value: string) {
+    origSet(key, value);
+
+    const ignoreKeys = ['sync_last', 'device_id', 'dark_mode', 'pin_code', 'auto_sync', '_localSyncCheck', 'customer_photos'];
     if (ignoreKeys.includes(key)) return;
 
-    // COLLECTIONS-এর key হলে auto-upload schedule
     if ((COLLECTIONS as readonly string[]).includes(key)) {
       scheduleUpload();
     }
   };
 }
 
+// Bug #6 Fix: properly restore original setItem
 export function disableAutoUpload(): void {
-  // Cannot easily un-proxy, so just flag
+  if (_originalSetItem) {
+    localStorage.setItem = _originalSetItem;
+    _originalSetItem = null;
+  }
   storageProxy = false;
 }
 

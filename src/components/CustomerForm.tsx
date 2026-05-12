@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { addCustomer, updateCustomer, getCustomers, setCustomerPhoto, getCustomerPhoto } from '../store';
+import { useToast } from '../hooks/useToast';
 import type { Page } from '../App';
 import { ArrowLeft, Save, User, Camera, X } from 'lucide-react';
 
@@ -19,6 +20,7 @@ export default function CustomerForm({ navigate, refresh, editId }: Props) {
   const [isRegular, setIsRegular] = useState(existingCustomer?.isRegular || false);
   const [photo, setPhoto] = useState<string | null>(editId ? getCustomerPhoto(editId) : null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { toast } = useToast();
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -48,27 +50,29 @@ export default function CustomerForm({ navigate, refresh, editId }: Props) {
 
   const handleSave = () => {
     if (!name.trim()) {
-      alert('গ্রাহকের নাম লিখুন');
+      toast.error('গ্রাহকের নাম লিখুন');
       return;
     }
     if (!mobile.trim()) {
-      alert('মোবাইল নম্বর লিখুন');
+      toast.error('মোবাইল নম্বর লিখুন');
       return;
     }
 
     const customers = getCustomers();
     const duplicate = customers.find(c => c.mobile === mobile.trim() && c.id !== editId);
     if (duplicate) {
-      alert('এই মোবাইল নম্বর ইতিমধ্যে আছে!');
+      toast.error('এই মোবাইল নম্বর ইতিমধ্যে আছে!');
       return;
     }
 
     if (editId) {
       updateCustomer(editId, { name: name.trim(), mobile: mobile.trim(), address: address.trim(), nid: nid.trim(), isRegular });
       if (photo) setCustomerPhoto(editId, photo);
+      toast.success('গ্রাহক আপডেট হয়েছে');
     } else {
       const newCustomer = addCustomer({ name: name.trim(), mobile: mobile.trim(), address: address.trim(), nid: nid.trim(), isRegular });
       if (photo) setCustomerPhoto(newCustomer.id, photo);
+      toast.success('গ্রাহক যোগ হয়েছে');
     }
 
     refresh();

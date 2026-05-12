@@ -1,23 +1,13 @@
 import { useMemo } from 'react';
-import { getJobs, getCustomerById, formatTaka, formatDateShort, payCustomerDue } from '../store';
+import { getJobs, getCustomerById, formatTaka, formatDateShort } from '../store';
 import type { Page } from '../App';
-import { ArrowLeft, ChevronRight, Phone, Banknote } from 'lucide-react';
-import { useState } from 'react';
-import DuePaymentModal from './DuePaymentModal';
+import { ArrowLeft, ChevronRight, Phone } from 'lucide-react';
 
 interface Props {
   navigate: (page: Page, params?: Record<string, string>) => void;
-  refresh: () => void;
 }
 
-export default function DueList({ navigate, refresh }: Props) {
-  const [modalData, setModalData] = useState<{ isOpen: boolean; customerId: string; maxAmount: number; customerName: string }>({
-    isOpen: false,
-    customerId: '',
-    maxAmount: 0,
-    customerName: ''
-  });
-
+export default function DueList({ navigate }: Props) {
   const dueData = useMemo(() => {
     const jobs = getJobs().filter(j => j.due > 0 && j.status !== 'cancelled');
     const customerMap: Record<string, { customerId: string; totalDue: number; jobs: typeof jobs }> = {};
@@ -45,23 +35,6 @@ export default function DueList({ navigate, refresh }: Props) {
     const message = `প্রিয় ${name},\n\nআপনার বাকি ${formatTaka(due)} টাকা পরিশোধ করার জন্য অনুরোধ করা হলো।\n\nধন্যবাদ।`;
     const url = `https://wa.me/88${mobile}?text=${encodeURIComponent(message)}`;
     window.open(url, '_blank');
-  };
-
-  const handleCollectDueClick = (customerId: string, totalDue: number, customerName: string) => {
-    if (totalDue <= 0) return;
-    setModalData({
-      isOpen: true,
-      customerId,
-      maxAmount: totalDue,
-      customerName
-    });
-  };
-
-  const handleDuePayment = (amount: number) => {
-    if (modalData.customerId) {
-      payCustomerDue(modalData.customerId, amount);
-      refresh();
-    }
   };
 
   return (
@@ -115,17 +88,10 @@ export default function DueList({ navigate, refresh }: Props) {
                 {/* Actions */}
                 <div className="flex gap-2 mt-3">
                   <button
-                    onClick={() => handleCollectDueClick(item.customerId, item.totalDue, item.customer?.name || '')}
-                    className="flex-1 py-2 bg-orange-50 text-orange-600 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
-                  >
-                    <Banknote size={12} />
-                    বাকি আদায়
-                  </button>
-                  <button
                     onClick={() => navigate('customer-detail', { customerId: item.customerId })}
                     className="flex-1 py-2 bg-gray-50 text-gray-600 rounded-lg text-xs font-medium flex items-center justify-center gap-1"
                   >
-                    প্রোফাইল
+                    প্রোফাইল দেখুন
                   </button>
                   <button
                     onClick={() => handleWhatsAppReminder(item.customer!.mobile, item.customer!.name, item.totalDue)}
@@ -167,14 +133,6 @@ export default function DueList({ navigate, refresh }: Props) {
           ))
         )}
       </div>
-
-      <DuePaymentModal
-        isOpen={modalData.isOpen}
-        onClose={() => setModalData({ ...modalData, isOpen: false })}
-        onSubmit={handleDuePayment}
-        maxAmount={modalData.maxAmount}
-        customerName={modalData.customerName}
-      />
     </div>
   );
 }
