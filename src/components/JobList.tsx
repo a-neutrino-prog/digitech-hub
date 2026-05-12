@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { getJobs, getCustomerById, formatTaka, formatDateShort, formatDate, deleteJob } from '../store';
+import { getJobs, getCustomerById, formatTaka, formatDateShort, formatDate, deleteJob, updateJob } from '../store';
 import type { Page } from '../App';
 import useResponsive from '../hooks/useResponsive';
 import { useToast } from '../hooks/useToast';
@@ -33,6 +33,8 @@ export default function JobList({ navigate }: Props) {
   const [statusFilter, setStatusFilter] = useState('all');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [jobsVersion, setJobsVersion] = useState(0);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const bulkMode = selectedIds.size > 0;
 
   const jobs = useMemo(() => getJobs().sort((a, b) => b.createdAt - a.createdAt), [jobsVersion]);
 
@@ -46,6 +48,21 @@ export default function JobList({ navigate }: Props) {
     e?.stopPropagation();
     const ok = await confirm({ title: 'কাজ ডিলিট', message: 'এই কাজটি ডিলিট করতে চান?', danger: true, confirmText: 'ডিলিট' });
     if (ok) { deleteJob(id); setJobsVersion(v => v + 1); setActiveMenu(null); toast.success('কাজ ডিলিট হয়েছে'); }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  };
+
+  const handleBulkDelete = async () => {
+    const ok = await confirm({ title: 'বাল্ক ডিলিট', message: `${selectedIds.size}টি কাজ ডিলিট করতে চান?`, danger: true, confirmText: 'সব ডিলিট' });
+    if (ok) { selectedIds.forEach(id => deleteJob(id)); setSelectedIds(new Set()); setJobsVersion(v => v + 1); toast.success(`${selectedIds.size}টি কাজ ডিলিট হয়েছে`); }
+  };
+
+  const handleBulkStatus = async (status: string) => {
+    const labels: Record<string, string> = { 'completed': 'সম্পন্ন', 'pending': 'পেন্ডিং', 'in-progress': 'চলমান' };
+    const ok = await confirm({ title: 'স্ট্যাটাস পরিবর্তন', message: `${selectedIds.size}টি কাজ "${labels[status]}" করতে চান?`, confirmText: 'পরিবর্তন করুন' });
+    if (ok) { selectedIds.forEach(id => updateJob(id, { status: status as any })); setSelectedIds(new Set()); setJobsVersion(v => v + 1); toast.success(`${selectedIds.size}টি কাজ আপডেট হয়েছে`); }
   };
 
   // ═══ DESKTOP ═══
@@ -103,9 +120,25 @@ export default function JobList({ navigate }: Props) {
   return (
     <div className="bg-gray-100 min-h-screen">
       <div className="bg-white px-4 pt-5 pb-4 border-b border-gray-200/60">
-        <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Briefcase size={22} className="text-primary" />কাজের তালিকা<span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full ml-1">{jobs.length}টি</span></h2>
-        <div className="mt-3 relative"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input type="text" placeholder="গ্রাহক বা সেবা খুঁজুন..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm form-input-wc" /></div>
-        <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">{STATUS_OPTIONS.map(opt => <button key={opt.value} onClick={() => setStatusFilter(opt.value)} className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${statusFilter === opt.value ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>{opt.label}</button>)}</div>
+        {bulkMode ? (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setSelectedIds(new Set())} className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center text-gray-600" aria-label="বাতিল">✕</button>
+              <span className="text-sm font-semibold text-gray-800">{selectedIds.size}টি সিলেক্টেড</span>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => handleBulkStatus('completed')} className="px-3 py-1.5 bg-success-light text-success-dark rounded-xl text-xs font-semibold active:scale-95 transition-all">✅ সম্পন্ন</button>
+              <button onClick={() => handleBulkStatus('pending')} className="px-3 py-1.5 bg-warning-light text-warning-dark rounded-xl text-xs font-semibold active:scale-95 transition-all">⏳ পেন্ডিং</button>
+              <button onClick={handleBulkDelete} className="px-3 py-1.5 bg-danger-light text-danger-dark rounded-xl text-xs font-semibold active:scale-95 transition-all">🗑️ ডিলিট</button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2"><Briefcase size={22} className="text-primary" />কাজের তালিকা<span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full ml-1">{jobs.length}টি</span></h2>
+            <div className="mt-3 relative"><Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" /><input type="text" placeholder="গ্রাহক বা সেবা খুঁজুন..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border-2 border-gray-200 rounded-2xl text-sm form-input-wc" /></div>
+            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">{STATUS_OPTIONS.map(opt => <button key={opt.value} onClick={() => setStatusFilter(opt.value)} className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${statusFilter === opt.value ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>{opt.label}</button>)}</div>
+          </>
+        )}
       </div>
 
       <div className="px-4 py-3 space-y-2.5">
@@ -113,8 +146,13 @@ export default function JobList({ navigate }: Props) {
           const c = getCustomerById(job.customerId); const s = statusCfg[job.status]; const isOpen = activeMenu === job.id;
           return (
             <div key={job.id} className={`animate-item bg-white rounded-2xl border border-gray-200/60 overflow-hidden list-item-status ${s.bar}`} style={{ animationDelay: `${i * 50}ms` }}>
-              <button onClick={() => navigate('job-detail', { jobId: job.id })} className="w-full p-4 text-left">
+              <button onClick={() => bulkMode ? toggleSelect(job.id) : navigate('job-detail', { jobId: job.id })} onContextMenu={(e) => { e.preventDefault(); toggleSelect(job.id); }} className="w-full p-4 text-left">
                 <div className="flex items-center gap-3.5">
+                  {bulkMode ? (
+                    <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all ${selectedIds.has(job.id) ? 'bg-primary border-primary text-white' : 'border-gray-300'}`}>
+                      {selectedIds.has(job.id) && <span className="text-xs">✓</span>}
+                    </div>
+                  ) : null}
                   <div className="w-11 h-11 rounded-xl bg-primary-50 flex items-center justify-center text-primary font-bold text-base flex-shrink-0">{c?.name.charAt(0) || '?'}</div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2"><p className="text-[15px] font-semibold text-gray-800 truncate">{c?.name || 'অজানা'}</p><span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${s.cls}`}>{s.label}</span></div>

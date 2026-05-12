@@ -27,13 +27,19 @@ export default function CustomerForm({ navigate, refresh, editId }: Props) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Resize and compress
+    // File size check (max 5MB raw)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('ছবি ৫MB এর ছোট হতে হবে');
+      return;
+    }
+
+    // Resize to 120px and compress to ~5-15KB
     const reader = new FileReader();
     reader.onload = (ev) => {
       const img = new Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX = 200;
+        const MAX = 120; // Small thumbnail
         let w = img.width, h = img.height;
         if (w > h) { h = h * MAX / w; w = MAX; }
         else { w = w * MAX / h; h = MAX; }
@@ -41,8 +47,19 @@ export default function CustomerForm({ navigate, refresh, editId }: Props) {
         canvas.height = h;
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, w, h);
-        const base64 = canvas.toDataURL('image/jpeg', 0.7);
-        setPhoto(base64);
+        const base64 = canvas.toDataURL('image/jpeg', 0.5); // Low quality = small size
+
+        // Check final size (max 50KB base64)
+        if (base64.length > 50000) {
+          // Re-compress smaller
+          const canvas2 = document.createElement('canvas');
+          canvas2.width = 80; canvas2.height = 80;
+          const ctx2 = canvas2.getContext('2d');
+          ctx2?.drawImage(img, 0, 0, 80, 80);
+          setPhoto(canvas2.toDataURL('image/jpeg', 0.3));
+        } else {
+          setPhoto(base64);
+        }
       };
       img.src = ev.target?.result as string;
     };

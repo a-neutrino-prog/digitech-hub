@@ -3,7 +3,7 @@ import { getDashboardStats, getJobs, getNotifications, getShopInfo, getCustomerB
 import type { Page } from '../App';
 import useResponsive from '../hooks/useResponsive';
 import { getGreeting, getGreetingEmoji } from '../utils/greeting';
-import { Bell, Settings, Clock, ChevronRight, List, AlertCircle, Briefcase, Users, PieChart, Calendar } from 'lucide-react';
+import { Bell, Settings, Clock, ChevronRight, List, AlertCircle, Briefcase, Users, PieChart, Calendar, Search } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 
 interface Props {
@@ -15,6 +15,8 @@ export default function Dashboard({ navigate }: Props) {
   const [stats, setStats] = useState(getDashboardStats());
   const [todayJobs, setTodayJobs] = useState<Job[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
   const shopInfo = getShopInfo();
 
   useEffect(() => {
@@ -136,12 +138,15 @@ export default function Dashboard({ navigate }: Props) {
 
         <div className="relative z-10 px-5 pt-6 pb-10" style={{ borderRadius: '0 0 24px 24px' }}>
           {/* Top Bar */}
-          <div className="flex items-center justify-between mb-7">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-blue-300 text-sm">{getGreeting()} {getGreetingEmoji()}</p>
               <h1 className="text-xl font-bold text-white tracking-tight">{shopInfo.shopName || 'ডিজিটেক হাব'}</h1>
             </div>
             <div className="flex gap-2">
+              <button onClick={() => setShowSearch(!showSearch)} className="w-10 h-10 rounded-xl flex items-center justify-center border border-white/12" style={{ background: 'rgba(255,255,255,0.1)' }} aria-label="খুঁজুন">
+                <Search size={18} className="text-white" />
+              </button>
               <button onClick={() => navigate('notifications')} className="relative w-10 h-10 rounded-xl flex items-center justify-center border border-white/12" style={{ background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }} aria-label="নোটিফিকেশন">
                 <Bell size={18} className="text-white" />
                 {unreadCount > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger" />}
@@ -152,11 +157,32 @@ export default function Dashboard({ navigate }: Props) {
             </div>
           </div>
 
+          {/* Search Bar */}
+          {showSearch && (
+            <div className="mb-4 fade-in">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="গ্রাহক, কাজ বা সেবা খুঁজুন..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl text-sm text-white placeholder-white/40"
+                  style={{ background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)' }}
+                  autoFocus
+                />
+              </div>
+              {searchQuery.trim() && <SearchResults query={searchQuery} navigate={navigate} />}
+            </div>
+          )}
+
           {/* Net Income */}
+          {!showSearch && (
           <div className="mb-5">
             <p className="text-blue-300 text-xs mb-1">আজকের নেট আয়</p>
             <p className="text-3xl font-extrabold text-white tracking-tight">{formatTaka(netIncome)}</p>
           </div>
+          )}
 
           {/* Quick Stats */}
           <div className="flex gap-2">
@@ -350,6 +376,20 @@ function UpcomingRemindersCard({ navigate }: { navigate: (p: Page, params?: Reco
           <div key={r.id} className="flex items-center gap-2 p-2.5 bg-gray-50 rounded-xl"><span className="text-sm">{r.type === 'bill' ? '📄' : r.type === 'payment' ? '💰' : '📝'}</span><div className="flex-1 min-w-0"><p className="text-xs text-gray-700 truncate">{r.title}</p><p className="text-[10px] text-gray-400">{r.time}</p></div></div>
         ))}</div>
       )}
+    </div>
+  );
+}
+
+import { getCustomers } from '../store';
+function SearchResults({ query, navigate: nav }: { query: string; navigate: (p: Page, params?: Record<string, string>) => void }) {
+  const q = query.toLowerCase().trim();
+  const cs = getCustomers().filter(c => c.name.toLowerCase().includes(q) || c.mobile.includes(q)).slice(0, 3);
+  const js = getJobs().filter(j => { const c = getCustomerById(j.customerId); return c?.name.toLowerCase().includes(q) || c?.mobile.includes(q) || j.services.some(s => s.serviceName.toLowerCase().includes(q)) || (j.jobNumber||'').toLowerCase().includes(q); }).slice(0, 3);
+  if (!cs.length && !js.length) return <p className="text-white/40 text-xs text-center mt-3">কিছু পাওয়া যায়নি</p>;
+  return (
+    <div className="mt-3 rounded-xl overflow-hidden" style={{ background:'rgba(255,255,255,0.1)', border:'1px solid rgba(255,255,255,0.12)' }}>
+      {cs.length > 0 && <div><p className="text-[10px] text-blue-300 uppercase tracking-wider px-3 pt-2 font-semibold">গ্রাহক</p>{cs.map(c => <button key={c.id} onClick={() => nav('customer-detail',{customerId:c.id})} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/10 text-left"><div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-xs font-bold text-white">{c.name.charAt(0)}</div><div><p className="text-sm text-white">{c.name}</p><p className="text-[10px] text-white/50">{c.mobile}</p></div></button>)}</div>}
+      {js.length > 0 && <div><p className="text-[10px] text-blue-300 uppercase tracking-wider px-3 pt-2 font-semibold">কাজ</p>{js.map(j => { const c = getCustomerById(j.customerId); return <button key={j.id} onClick={() => nav('job-detail',{jobId:j.id})} className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-white/10 text-left"><div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-xs text-white">📋</div><div className="flex-1 min-w-0"><p className="text-sm text-white truncate">{c?.name} — {j.services.map(s=>s.serviceName).join(', ')}</p><p className="text-[10px] text-white/50">{formatTaka(j.totalAmount)}</p></div></button>; })}</div>}
     </div>
   );
 }
