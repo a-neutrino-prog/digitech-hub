@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { updateShopInfo, completeOnboarding } from '../store';
+import { useToast } from '../hooks/useToast';
 import { ChevronRight, Store, User, Smartphone, Check } from 'lucide-react';
 
 interface Props {
@@ -13,11 +14,22 @@ const STEPS = [
 ];
 
 export default function Onboarding({ onComplete }: Props) {
+  const { toast } = useToast();
+  const shopNameRef = useRef<HTMLInputElement | null>(null);
   const [step, setStep] = useState(0);
   const [shopName, setShopName] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+
+  const handleNextStep = () => {
+    if (!shopName.trim()) {
+      toast.error('দোকানের নাম লিখুন');
+      shopNameRef.current?.focus();
+      return;
+    }
+    setStep(2);
+  };
 
   const handleFinish = () => {
     if (shopName.trim()) {
@@ -89,7 +101,7 @@ export default function Onboarding({ onComplete }: Props) {
             <div className="space-y-4">
               <div>
                 <label className="text-xs font-semibold text-blue-300 mb-1.5 block flex items-center gap-1"><Store size={12} /> দোকানের নাম *</label>
-                <input type="text" value={shopName} onChange={e => setShopName(e.target.value)} placeholder="যেমন: ডিজিটেক হাব"
+                <input ref={shopNameRef} type="text" value={shopName} onChange={e => setShopName(e.target.value)} placeholder="যেমন: ডিজিটেক হাব"
                   className="w-full px-4 py-3 rounded-2xl text-sm text-white placeholder-white/30"
                   style={{ background: 'rgba(255,255,255,0.1)', border: '1.5px solid rgba(255,255,255,0.15)' }} autoFocus />
               </div>
@@ -117,7 +129,7 @@ export default function Onboarding({ onComplete }: Props) {
               <button onClick={() => setStep(0)} className="flex-1 py-3.5 rounded-2xl font-semibold text-sm text-white/70" style={{ background: 'rgba(255,255,255,0.08)' }}>
                 পিছনে
               </button>
-              <button onClick={() => setStep(2)}
+              <button onClick={handleNextStep}
                 className="flex-[2] py-3.5 rounded-2xl font-semibold text-sm text-white flex items-center justify-center gap-2 active:scale-[0.97] transition-all"
                 style={{ background: 'linear-gradient(135deg, #2563EB, #1D4ED8)', boxShadow: '0 8px 24px rgba(37,99,235,0.3)' }}>
                 পরবর্তী <ChevronRight size={18} />
@@ -125,7 +137,7 @@ export default function Onboarding({ onComplete }: Props) {
             </div>
 
             <button onClick={() => { completeOnboarding(); onComplete(); }} className="w-full text-center text-blue-400/60 text-xs mt-4">
-              এখন না, পরে করব →
+              এখন না, পরে সেটিংস থেকে করব →
             </button>
           </div>
         )}

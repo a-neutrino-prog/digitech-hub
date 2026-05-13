@@ -128,6 +128,14 @@ export default function TransactionList({ navigate }: Props) {
             </button>
           ))}
         </div>
+
+        {/* Reset All Filters */}
+        {(search || dateRange !== 'all' || typeFilter !== 'all') && (
+          <button onClick={() => { setSearch(''); setDateRange('all'); setTypeFilter('all'); setShowDatePicker(false); setCustomFrom(''); setCustomTo(''); }}
+            className="w-full py-2 mt-2 text-xs font-semibold text-danger bg-danger-light rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all border border-red-200">
+            <X size={12} /> সব ফিল্টার মুছুন
+          </button>
+        )}
       </div>
 
       {/* Summary */}

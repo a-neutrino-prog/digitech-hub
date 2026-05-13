@@ -9,7 +9,6 @@ import {
 import { getDb, getFirebaseAuth, isFirebaseReady, initFirebase } from './init';
 import { isFirebaseConfigured } from './config';
 
-// ===== Types =====
 export type SyncStatus = 'idle' | 'syncing' | 'success' | 'error' | 'offline' | 'not-configured' | 'realtime';
 const COLLECTIONS = ['customers', 'services', 'jobs', 'transactions', 'shopInfo', 'notifications', 'reminders'] as const;
 
@@ -17,6 +16,7 @@ let currentUser: User | null = null;
 let _syncCallbacks: (() => void)[] = [];
 let _isApplyingRemote = false;
 let _originalSetItem: ((key: string, value: string) => void) | null = null;
+let _downloadCooldown = 0; // prevent re-upload after download
 
 export function getCurrentUser(): User | null { return currentUser; }
 
@@ -37,7 +37,7 @@ export function initSync(onDataChange: () => void): () => void {
   return () => { unsub(); _syncCallbacks = _syncCallbacks.filter(cb => cb !== onDataChange); };
 }
 
-function notifyDataChange() { _syncCallbacks.forEach(cb => cb()); }
+function notifyDataChange() { _syncCallbacks.forEach(cb => { try { cb(); } catch {} }); }
 
 // ===== Auth =====
 export function listenAuth(cb: (u: User | null) => void): () => void {
@@ -79,11 +79,7 @@ export async function signOut(): Promise<void> {
   ['sync_last', 'realtime_sync', 'auto_sync', '_localSyncCheck', '_dataModifiedAt'].forEach(k => localStorage.removeItem(k));
 }
 
-// ===== Subcollection Sync Architecture =====
-// প্রতিটি collection আলাদা Firestore subcollection-এ sync হয়:
-//   users/{uid}/data/{collectionName} → { items: [...], updatedAt: timestamp }
-// এতে 1MB limit hit হবে না, এবং incremental sync সম্ভব
-
+// ===== Helpers =====
 function getDeviceId(): string {
   let id = localStorage.getItem('device_id');
   if (!id) { id = 'dev_' + Date.now().toString(36) + Math.random().toString(36).slice(2); localStorage.setItem('device_id', id); }
@@ -95,17 +91,21 @@ export function markDataModified(): void { localStorage.setItem('_dataModifiedAt
 export function getLastSyncTime(): number { return parseInt(localStorage.getItem('sync_last') || '0'); }
 function setLastSyncTime(): void { localStorage.setItem('sync_last', Date.now().toString()); }
 
-// Safe localStorage write (bypasses proxy)
 function safeSetItem(key: string, value: string) {
   if (_originalSetItem) _originalSetItem(key, value);
   else localStorage.setItem(key, value);
 }
 
-// ===== Upload — Per-collection =====
+// ===== Upload =====
 let uploadTimer: ReturnType<typeof setTimeout> | null = null;
 
 export async function uploadToCloud(): Promise<boolean> {
   if (_isApplyingRemote || !isFirebaseReady() || !currentUser) return false;
+  // FIX: Don't upload right after download
+  if (Date.now() - _downloadCooldown < 5000) {
+    console.log('[Sync] Upload skipped — download cooldown');
+    return true;
+  }
   const db = getDb(); if (!db) return false;
 
   try {
@@ -113,30 +113,28 @@ export async function uploadToCloud(): Promise<boolean> {
     const batch = writeBatch(db);
     const timestamp = Date.now();
 
-    // Upload each collection as separate subcollection doc
     COLLECTIONS.forEach(key => {
       const raw = localStorage.getItem(key);
       if (raw) {
-        const docRef = doc(db, 'users', uid, 'data', key);
-        batch.set(docRef, {
-          items: raw, // JSON string
+        batch.set(doc(db, 'users', uid, 'data', key), {
+          items: raw,
           updatedAt: timestamp,
           deviceId: getDeviceId(),
         });
       }
     });
 
-    // Meta document — last sync info
-    const metaRef = doc(db, 'users', uid);
-    batch.set(metaRef, {
+    batch.set(doc(db, 'users', uid), {
       lastSync: serverTimestamp(),
       deviceId: getDeviceId(),
       timestamp,
     }, { merge: true });
 
     await batch.commit();
+    // FIX: Update local mod time to match what we uploaded
+    safeSetItem('_dataModifiedAt', timestamp.toString());
     setLastSyncTime();
-    console.log('[Sync] Uploaded all collections');
+    console.log('[Sync] Uploaded, timestamp:', timestamp);
     return true;
   } catch (e) {
     console.error('[Sync] Upload error:', e);
@@ -146,14 +144,17 @@ export async function uploadToCloud(): Promise<boolean> {
 
 export function scheduleUpload(): void {
   if (_isApplyingRemote) return;
+  if (Date.now() - _downloadCooldown < 5000) return; // FIX: cooldown
   markDataModified();
   if (uploadTimer) clearTimeout(uploadTimer);
   uploadTimer = setTimeout(() => {
-    if (navigator.onLine && currentUser) uploadToCloud().then(ok => { if (ok) console.log('[Sync] Auto-uploaded'); });
+    if (navigator.onLine && currentUser && Date.now() - _downloadCooldown >= 5000) {
+      uploadToCloud();
+    }
   }, 2000);
 }
 
-// ===== Download — Per-collection =====
+// ===== Download =====
 export async function downloadFromCloud(): Promise<boolean> {
   if (!isFirebaseReady() || !currentUser) return false;
   const db = getDb(); if (!db) return false;
@@ -162,19 +163,24 @@ export async function downloadFromCloud(): Promise<boolean> {
     const uid = currentUser.uid;
     _isApplyingRemote = true;
 
+    // Get cloud timestamp first
+    const metaSnap = await getDoc(doc(db, 'users', uid));
+    const cloudTimestamp = metaSnap.exists() ? (metaSnap.data().timestamp || Date.now()) : Date.now();
+
     for (const key of COLLECTIONS) {
-      const docRef = doc(db, 'users', uid, 'data', key);
-      const snap = await getDoc(docRef);
+      const snap = await getDoc(doc(db, 'users', uid, 'data', key));
       if (snap.exists()) {
-        const data = snap.data();
-        safeSetItem(key, data.items);
+        safeSetItem(key, snap.data().items);
       }
     }
 
+    // FIX: Set local mod time to cloud timestamp — prevents re-upload
+    safeSetItem('_dataModifiedAt', cloudTimestamp.toString());
     setLastSyncTime();
+    _downloadCooldown = Date.now(); // FIX: Start cooldown
     _isApplyingRemote = false;
     notifyDataChange();
-    console.log('[Sync] Downloaded all collections');
+    console.log('[Sync] Downloaded, cloud timestamp:', cloudTimestamp);
     return true;
   } catch (e) {
     console.error('[Sync] Download error:', e);
@@ -183,7 +189,7 @@ export async function downloadFromCloud(): Promise<boolean> {
   }
 }
 
-// ===== Full Sync — Incremental per-collection =====
+// ===== Full Sync =====
 export async function fullSync(): Promise<SyncStatus> {
   if (!isFirebaseConfigured()) return 'not-configured';
   if (!navigator.onLine) return 'offline';
@@ -193,22 +199,28 @@ export async function fullSync(): Promise<SyncStatus> {
   try {
     const uid = currentUser.uid;
     const localTime = getLocalModTime();
-    let cloudNewer = false;
 
     const metaSnap = await getDoc(doc(db, 'users', uid));
+
     if (metaSnap.exists()) {
       const cloudTime = metaSnap.data().timestamp || 0;
-      if (cloudTime > localTime) cloudNewer = true;
+      console.log('[Sync] Compare — local:', localTime, 'cloud:', cloudTime);
+
+      if (cloudTime > localTime) {
+        console.log('[Sync] Cloud newer → downloading');
+        await downloadFromCloud();
+        return 'success';
+      }
+
+      if (cloudTime === localTime) {
+        console.log('[Sync] Already in sync');
+        setLastSyncTime();
+        return 'success';
+      }
     }
 
-    if (cloudNewer) {
-      console.log('[Sync] Cloud newer, downloading...');
-      await downloadFromCloud();
-      return 'success';
-    }
-
-    // Local newer or first sync → upload
-    console.log('[Sync] Local newer, uploading...');
+    // Local newer or no cloud data
+    console.log('[Sync] Local newer → uploading');
     if (!localTime) markDataModified();
     await uploadToCloud();
     return 'success';
@@ -218,7 +230,7 @@ export async function fullSync(): Promise<SyncStatus> {
   }
 }
 
-// ===== Realtime Listener — Listen to meta doc for changes =====
+// ===== Realtime Listener =====
 let realtimeUnsub: Unsubscribe | null = null;
 
 export function startRealtimeSync(onUpdate?: () => void): void {
@@ -228,20 +240,25 @@ export function startRealtimeSync(onUpdate?: () => void): void {
 
   if (onUpdate) _syncCallbacks.push(onUpdate);
   const metaRef = doc(db, 'users', currentUser.uid);
-  let isFirst = true;
 
+  // FIX: Don't skip first snapshot — it may contain data from another device
+  // Instead, always check deviceId and timestamp
   realtimeUnsub = onSnapshot(metaRef, async (snap) => {
-    if (isFirst) { isFirst = false; return; }
     if (!snap.exists()) return;
 
     const data = snap.data();
-    if (data.deviceId === getDeviceId()) return; // Own update
+    const cloudDeviceId = data.deviceId;
+    const myDeviceId = getDeviceId();
+
+    // Own device's upload → ignore
+    if (cloudDeviceId === myDeviceId) return;
 
     const cloudTime = data.timestamp || 0;
     const localTime = getLocalModTime();
 
+    // Cloud is newer → download
     if (cloudTime > localTime) {
-      console.log('[Sync] Realtime: remote change detected, downloading...');
+      console.log('[Sync] Realtime: remote update from device', cloudDeviceId);
       await downloadFromCloud();
     }
   }, err => console.error('[Sync] Realtime error:', err));
@@ -264,7 +281,8 @@ export function enableAutoUpload(): void {
   localStorage.setItem = function (key: string, value: string) {
     orig(key, value);
     if (_isApplyingRemote) return;
-    const ignore = ['sync_last', 'device_id', 'dark_mode', 'pin_code', 'auto_sync', '_localSyncCheck', '_dataModifiedAt', 'customer_photos', 'pwa_banner_dismissed', 'realtime_sync', 'onboarding_done'];
+    if (Date.now() - _downloadCooldown < 5000) return; // FIX: cooldown after download
+    const ignore = ['sync_last', 'device_id', 'dark_mode', 'pin_code', 'auto_sync', '_localSyncCheck', '_dataModifiedAt', 'customer_photos', 'pwa_banner_dismissed', 'realtime_sync', 'onboarding_done', 'pin_lockout', 'pin_attempts', 'error_logs'];
     if (ignore.includes(key)) return;
     if ((COLLECTIONS as readonly string[]).includes(key)) scheduleUpload();
   };

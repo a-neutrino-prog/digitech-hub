@@ -84,7 +84,8 @@ export default function App() {
     };
 
     const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
-    events.forEach(e => document.addEventListener(e, resetInactivity, { passive: true }));
+    const listenerOptions = { passive: true } as AddEventListenerOptions;
+    events.forEach(e => document.addEventListener(e, resetInactivity, listenerOptions));
     resetInactivity();
 
     return () => {
@@ -92,7 +93,7 @@ export default function App() {
       window.removeEventListener('offline', goOffline);
       unsubSync();
       clearTimeout(inactivityTimer);
-      events.forEach(e => document.removeEventListener(e, resetInactivity));
+      events.forEach(e => document.removeEventListener(e, resetInactivity, listenerOptions));
     };
   }, []);
 
@@ -158,21 +159,21 @@ export default function App() {
   };
 
   return (
-    <>
+    <div className={!isOnline ? 'pt-10' : ''}>
       {/* Offline Indicator */}
       {!isOnline && (
-        <div className="fixed top-0 left-0 right-0 z-[9998] bg-warning text-white text-center py-2 text-xs font-semibold fade-in" style={{ fontFamily: "'Noto Sans Bengali', sans-serif" }}>
+        <div className="sticky top-0 left-0 right-0 z-[9998] bg-warning text-white text-center py-2 text-xs font-semibold fade-in" style={{ fontFamily: "'Noto Sans Bengali', sans-serif" }}>
           📴 অফলাইন — ইন্টারনেট সংযোগ নেই। ডেটা লোকালে সেভ হচ্ছে।
         </div>
       )}
-    <ResponsiveLayout
-      currentPage={nav.page}
-      navigate={navigate}
-      fabOpen={fabOpen}
-      setFabOpen={setFabOpen}
-    >
-      {renderPage()}
-    </ResponsiveLayout>
-    </>
+      <ResponsiveLayout
+        currentPage={nav.page}
+        navigate={navigate}
+        fabOpen={fabOpen}
+        setFabOpen={setFabOpen}
+      >
+        {renderPage()}
+      </ResponsiveLayout>
+    </div>
   );
 }

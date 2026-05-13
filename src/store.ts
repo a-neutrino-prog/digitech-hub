@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════
-// STORE — Re-export Hub
-// All domain logic split into src/stores/*.ts
-// This file re-exports everything for backward compatibility
+// STORE — Pure Re-export Hub
+// All domain logic lives in src/stores/*.ts
+// This file only re-exports for backward compatibility
 // ═══════════════════════════════════════════════════════
 
 // Helpers
@@ -36,121 +36,17 @@ export { getShopInfo, updateShopInfo, getNotifications, addNotification, markNot
 export { hashPin, getPinHash, setPinCode, verifyPin, removePinCode, isPinEnabled, getDarkMode, setDarkMode, isOnboardingComplete, completeOnboarding } from './stores/settings';
 export type { ShopInfo, Notification } from './stores/settings';
 
-// Dashboard Stats
-import { getTransactions } from './stores/transactions';
-import { getJobs } from './stores/jobs';
-import { getTodayStart, getTodayEnd } from './stores/helpers';
-
-export function getDashboardStats() {
-  const todayStart = getTodayStart(), todayEnd = getTodayEnd();
-  const txs = getTransactions();
-  const jobs = getJobs();
-  const todayTxs = txs.filter(t => t.date >= todayStart && t.date <= todayEnd);
-  const todayIncome = todayTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const todayExpense = todayTxs.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
-  const todayJobs = jobs.filter(j => j.date >= todayStart && j.date <= todayEnd);
-  return {
-    todayIncome, todayExpense,
-    totalDue: jobs.filter(j => j.status !== 'cancelled').reduce((s, j) => s + j.due, 0),
-    todayJobsTotal: todayJobs.length,
-    pendingJobs: todayJobs.filter(j => j.status === 'pending' || j.status === 'in-progress').length,
-    completedJobs: todayJobs.filter(j => j.status === 'completed').length,
-  };
-}
+// Dashboard
+export { getDashboardStats } from './stores/dashboard';
 
 // Backup / Restore
-import { getCustomers } from './stores/customers';
-import { getServices } from './stores/services';
-import { getShopInfo, getNotifications } from './stores/settings';
-import { getReminders } from './stores/reminders';
-import { setItem } from './stores/helpers';
-
-const BACKUP_VERSION = 2;
-
-export function exportBackup(): string {
-  return JSON.stringify({
-    _version: BACKUP_VERSION,
-    _appName: 'ডিজিটেক হাব',
-    customers: getCustomers(), services: getServices(), jobs: getJobs(),
-    transactions: getTransactions(), shopInfo: getShopInfo(),
-    notifications: getNotifications(), reminders: getReminders(),
-    exportedAt: Date.now(),
-  }, null, 2);
-}
-
-// Preview backup without importing
-export function previewBackup(jsonStr: string): { valid: boolean; error?: string; summary?: BackupSummary } {
-  try {
-    const data = JSON.parse(jsonStr);
-    if (!data || typeof data !== 'object') return { valid: false, error: 'সঠিক JSON নয়' };
-
-    const arrays = ['customers', 'jobs', 'transactions', 'services', 'notifications', 'reminders'];
-    for (const key of arrays) {
-      if (data[key] && !Array.isArray(data[key])) return { valid: false, error: `"${key}" সঠিক নয়` };
-    }
-
-    const summary: BackupSummary = {
-      version: data._version || 1,
-      exportedAt: data.exportedAt || 0,
-      counts: {
-        customers: data.customers?.length || 0,
-        jobs: data.jobs?.length || 0,
-        transactions: data.transactions?.length || 0,
-        services: data.services?.length || 0,
-        reminders: data.reminders?.length || 0,
-      },
-      currentCounts: {
-        customers: getCustomers().length,
-        jobs: getJobs().length,
-        transactions: getTransactions().length,
-        services: getServices().length,
-        reminders: getReminders().length,
-      },
-    };
-
-    return { valid: true, summary };
-  } catch (e: any) {
-    return { valid: false, error: e.message || 'ফাইল পড়া যায়নি' };
-  }
-}
-
-export interface BackupSummary {
-  version: number;
-  exportedAt: number;
-  counts: Record<string, number>;
-  currentCounts: Record<string, number>;
-}
-
-export function importBackup(jsonStr: string): { success: boolean; error?: string } {
-  try {
-    const data = JSON.parse(jsonStr);
-    if (!data || typeof data !== 'object') return { success: false, error: 'সঠিক JSON নয়' };
-
-    // Version check
-    const ver = data._version || 1;
-    if (ver > BACKUP_VERSION) return { success: false, error: `এই ব্যাকআপ নতুন ভার্সনের (v${ver})। অ্যাপ আপডেট করুন।` };
-
-    const arrays = ['customers', 'jobs', 'transactions', 'services', 'notifications', 'reminders'];
-    for (const key of arrays) { if (data[key] && !Array.isArray(data[key])) return { success: false, error: `"${key}" সঠিক নয়` }; }
-
-    // Validate customers
-    if (data.customers) {
-      for (const c of data.customers) { if (!c.id || !c.name) return { success: false, error: 'গ্রাহক ডেটা corrupt' }; }
-    }
-
-    // Import
-    for (const key of arrays) { if (data[key]) setItem(key, data[key]); }
-    if (data.shopInfo) setItem('shopInfo', data.shopInfo);
-    return { success: true };
-  } catch (e: any) { return { success: false, error: e.message || 'ফাইল পড়া যায়নি' }; }
-}
-
-export function clearAllData(): void {
-  ['customers', 'services', 'jobs', 'transactions', 'notifications', 'reminders'].forEach(k => localStorage.removeItem(k));
-}
+export { exportBackup, previewBackup, importBackup, clearAllData } from './stores/backup';
+export type { BackupSummary } from './stores/backup';
 
 // CSV Exports
-import { getCustomerById } from './stores/customers';
+import { getJobs } from './stores/jobs';
+import { getTransactions } from './stores/transactions';
+import { getCustomers, getCustomerById } from './stores/customers';
 
 function csvEscape(val: any): string {
   const str = String(val ?? '');
@@ -159,19 +55,25 @@ function csvEscape(val: any): string {
 
 export function exportJobsCSV(): string {
   const headers = 'Date,JobNumber,Customer,Mobile,Services,Total,Advance,Due,Status';
-  const rows = getJobs().map(j => { const c = getCustomerById(j.customerId); return [csvEscape(new Date(j.date).toLocaleDateString()), csvEscape(j.jobNumber||''), csvEscape(c?.name||''), csvEscape(c?.mobile||''), csvEscape(j.services.map(s=>s.serviceName).join('; ')), j.totalAmount, j.advance, j.due, csvEscape(j.status)].join(','); });
+  const rows = getJobs().map(j => {
+    const c = getCustomerById(j.customerId);
+    return [csvEscape(new Date(j.date).toLocaleDateString()), csvEscape(j.jobNumber || ''), csvEscape(c?.name || ''), csvEscape(c?.mobile || ''), csvEscape(j.services.map(s => s.serviceName).join('; ')), j.totalAmount, j.advance, j.due, csvEscape(j.status)].join(',');
+  });
   return [headers, ...rows].join('\n');
 }
 
 export function exportTransactionsCSV(): string {
   const headers = 'Date,Type,Category,Amount,Description';
-  const rows = getTransactions().map(t => [csvEscape(new Date(t.date).toLocaleDateString()), csvEscape(t.type==='income'?'Income':'Expense'), csvEscape(t.category), t.amount, csvEscape(t.description||'')].join(','));
+  const rows = getTransactions().map(t => [csvEscape(new Date(t.date).toLocaleDateString()), csvEscape(t.type === 'income' ? 'Income' : 'Expense'), csvEscape(t.category), t.amount, csvEscape(t.description || '')].join(','));
   return [headers, ...rows].join('\n');
 }
 
 export function exportCustomersCSV(): string {
   const headers = 'Name,Mobile,Address,NID,Regular,TotalJobs,TotalSpent,TotalDue';
   const allJobs = getJobs();
-  const rows = getCustomers().map(c => { const cj = allJobs.filter(j=>j.customerId===c.id&&j.status!=='cancelled'); return [csvEscape(c.name), csvEscape(c.mobile), csvEscape(c.address||''), csvEscape(c.nid||''), c.isRegular?'Yes':'No', cj.length, cj.reduce((s,j)=>s+j.totalAmount,0), cj.reduce((s,j)=>s+j.due,0)].join(','); });
+  const rows = getCustomers().map(c => {
+    const cj = allJobs.filter(j => j.customerId === c.id && j.status !== 'cancelled');
+    return [csvEscape(c.name), csvEscape(c.mobile), csvEscape(c.address || ''), csvEscape(c.nid || ''), c.isRegular ? 'Yes' : 'No', cj.length, cj.reduce((s, j) => s + j.totalAmount, 0), cj.reduce((s, j) => s + j.due, 0)].join(',');
+  });
   return [headers, ...rows].join('\n');
 }

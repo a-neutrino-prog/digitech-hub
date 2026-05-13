@@ -1,5 +1,5 @@
 import { getItem, setItem, generateId } from './helpers';
-import { addTransaction, getTransactions } from './transactions';
+import { addTransaction, getTransactions, updateTransaction } from './transactions';
 
 export type JobStatus = 'pending' | 'in-progress' | 'completed' | 'cancelled';
 
@@ -116,7 +116,6 @@ export function updatePaymentInJob(jobId: string, paymentIndex: number, newAmoun
     setItem('jobs', jobs);
     const txId = job.payments[paymentIndex].id;
     if (txId) {
-      const { updateTransaction } = require('./transactions');
       updateTransaction(txId, { amount: newAmount });
     }
   }

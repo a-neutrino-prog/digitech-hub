@@ -1,5 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState } from 'react';
 import { getDashboardStats, getJobs, getTransactions, getNotifications, getShopInfo, getCustomerById, getUpcomingReminders, formatTaka, toBanglaNum, isToday, getTodayStart, getTodayEnd, type Job } from '../store';
+import { usePageLoad } from '../hooks/useLoading';
+import { SkeletonDashboard } from './ui/Skeleton';
 import type { Page } from '../App';
 import useResponsive from '../hooks/useResponsive';
 import { getGreeting, getGreetingEmoji } from '../utils/greeting';
@@ -11,91 +13,66 @@ interface Props {
 }
 
 export default function Dashboard({ navigate }: Props) {
+  const loading = usePageLoad();
   const { isMobile, isDesktop } = useResponsive();
-  const [stats, setStats] = useState(getDashboardStats());
-  const [todayJobs, setTodayJobs] = useState<Job[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+
+  if (loading) return <SkeletonDashboard />;
+
   const shopInfo = getShopInfo();
 
-  useEffect(() => {
-    setStats(getDashboardStats());
-    setTodayJobs(getJobs().filter(j => isToday(j.date)).sort((a, b) => b.createdAt - a.createdAt));
-    setUnreadCount(getNotifications().filter(n => !n.read).length);
-  }, []);
+  // Live derived data — no stale hooks
+  const stats = getDashboardStats();
+  const allJobs = getJobs();
+  const allTxs = getTransactions();
+  const unreadCount = getNotifications().filter(n => !n.read).length;
+  const todayJobs: Job[] = allJobs.filter(j => isToday(j.date)).sort((a, b) => b.createdAt - a.createdAt);
 
-  const serviceWiseIncome = useMemo(() => {
-    const todayStart = getTodayStart(), todayEnd = getTodayEnd();
-    const jobs = getJobs().filter(j => j.date >= todayStart && j.date <= todayEnd && j.status !== 'cancelled');
-    const map: Record<string, number> = {};
-    jobs.forEach(job => job.services.forEach(s => { map[s.serviceName] = (map[s.serviceName] || 0) + s.total; }));
-    return Object.entries(map).map(([name, amount]) => ({ name: name.length > 8 ? name.slice(0, 8) + '..' : name, fullName: name, amount })).sort((a, b) => b.amount - a.amount).slice(0, 6);
-  }, []);
+  const todayStart = getTodayStart();
+  const todayEnd = getTodayEnd();
+  const jobsToday = allJobs.filter(j => j.date >= todayStart && j.date <= todayEnd && j.status !== 'cancelled');
+  const serviceMapToday: Record<string, number> = {};
+  jobsToday.forEach(job => job.services.forEach(s => { serviceMapToday[s.serviceName] = (serviceMapToday[s.serviceName] || 0) + s.total; }));
+  const serviceWiseIncome = Object.entries(serviceMapToday).map(([name, amount]) => ({ name: name.length > 8 ? name.slice(0, 8) + '..' : name, fullName: name, amount })).sort((a, b) => b.amount - a.amount).slice(0, 6);
 
-  const topDueCustomers = useMemo(() => {
-    const jobs = getJobs().filter(j => j.due > 0 && j.status !== 'cancelled');
-    const map: Record<string, number> = {};
-    jobs.forEach(j => { map[j.customerId] = (map[j.customerId] || 0) + j.due; });
-    return Object.entries(map).map(([id, due]) => ({ customer: getCustomerById(id), due })).filter(x => x.customer).sort((a, b) => b.due - a.due).slice(0, 5);
-  }, []);
+  const dueMap: Record<string, number> = {};
+  allJobs.filter(j => j.due > 0 && j.status !== 'cancelled').forEach(j => { dueMap[j.customerId] = (dueMap[j.customerId] || 0) + j.due; });
+  const topDueCustomers = Object.entries(dueMap).map(([id, due]) => ({ customer: getCustomerById(id), due })).filter(x => x.customer).sort((a, b) => b.due - a.due).slice(0, 5);
 
-  const weeklyTrend = useMemo(() => {
-    const days: { date: string; income: number }[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0,0,0,0);
-      const dayJobs = getJobs().filter(j => j.date >= d.getTime() && j.date < d.getTime() + 86400000 && j.status !== 'cancelled');
-      days.push({ date: d.toLocaleDateString('bn-BD', { weekday: 'short' }), income: dayJobs.reduce((s, j) => s + j.totalAmount - j.due, 0) });
-    }
-    return days;
-  }, []);
+  const weeklyTrend: { date: string; income: number }[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0,0,0,0);
+    const dayJobs = allJobs.filter(j => j.date >= d.getTime() && j.date < d.getTime() + 86400000 && j.status !== 'cancelled');
+    weeklyTrend.push({ date: d.toLocaleDateString('bn-BD', { weekday: 'short' }), income: dayJobs.reduce((s, j) => s + j.totalAmount - j.due, 0) });
+  }
 
-  // ═══ SMART ANALYTICS ═══
-  const smartInsights = useMemo(() => {
-    const allJobs = getJobs();
-    const allTxs = getTransactions();
-    const now = new Date();
+  const now = new Date();
+  const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
+  const yTxs = allTxs.filter(t => t.date >= yesterday.getTime() && t.date < yesterday.getTime() + 86400000);
+  const yesterdayIncome = yTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+  const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() - weekStart.getDay()); weekStart.setHours(0,0,0,0);
+  const lastWeekStart = new Date(weekStart); lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+  const thisWeekIncome = allTxs.filter(t => t.type === 'income' && t.date >= weekStart.getTime()).reduce((s, t) => s + t.amount, 0);
+  const lastWeekIncome = allTxs.filter(t => t.type === 'income' && t.date >= lastWeekStart.getTime() && t.date < weekStart.getTime()).reduce((s, t) => s + t.amount, 0);
+  const weekGrowth = lastWeekIncome > 0 ? Math.round(((thisWeekIncome - lastWeekIncome) / lastWeekIncome) * 100) : 0;
+  const dueJobs = allJobs.filter(j => j.due > 0 && j.status !== 'cancelled');
+  const nowMs = Date.now();
+  const due1to7 = dueJobs.filter(j => nowMs - j.date <= 7 * 86400000).reduce((s, j) => s + j.due, 0);
+  const due8to30 = dueJobs.filter(j => { const age = nowMs - j.date; return age > 7 * 86400000 && age <= 30 * 86400000; }).reduce((s, j) => s + j.due, 0);
+  const due30plus = dueJobs.filter(j => nowMs - j.date > 30 * 86400000).reduce((s, j) => s + j.due, 0);
+  const serviceMapAll: Record<string, number> = {};
+  allJobs.filter(j => j.status !== 'cancelled').forEach(j => j.services.forEach(s => { serviceMapAll[s.serviceName] = (serviceMapAll[s.serviceName] || 0) + s.total; }));
+  const topServices = Object.entries(serviceMapAll).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  const pendingDue = dueJobs.filter(j => j.status === 'pending' || j.status === 'in-progress').length;
+  const overdueCount = dueJobs.filter(j => nowMs - j.date > 7 * 86400000).length;
+  const smartInsights = { yesterdayIncome, incomeVsYesterday: stats.todayIncome - yesterdayIncome, thisWeekIncome, lastWeekIncome, weekGrowth, due1to7, due8to30, due30plus, topServices, pendingDue, overdueCount };
 
-    // গতকালের আয়
-    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
-    const yTxs = allTxs.filter(t => t.date >= yesterday.getTime() && t.date < yesterday.getTime() + 86400000);
-    const yesterdayIncome = yTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-
-    // এই সপ্তাহ vs গত সপ্তাহ
-    const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() - weekStart.getDay()); weekStart.setHours(0,0,0,0);
-    const lastWeekStart = new Date(weekStart); lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-    const thisWeekIncome = allTxs.filter(t => t.type === 'income' && t.date >= weekStart.getTime()).reduce((s, t) => s + t.amount, 0);
-    const lastWeekIncome = allTxs.filter(t => t.type === 'income' && t.date >= lastWeekStart.getTime() && t.date < weekStart.getTime()).reduce((s, t) => s + t.amount, 0);
-    const weekGrowth = lastWeekIncome > 0 ? Math.round(((thisWeekIncome - lastWeekIncome) / lastWeekIncome) * 100) : 0;
-
-    // Due aging
-    const dueJobs = allJobs.filter(j => j.due > 0 && j.status !== 'cancelled');
-    const nowMs = Date.now();
-    const due1to7 = dueJobs.filter(j => nowMs - j.date <= 7 * 86400000).reduce((s, j) => s + j.due, 0);
-    const due8to30 = dueJobs.filter(j => { const age = nowMs - j.date; return age > 7 * 86400000 && age <= 30 * 86400000; }).reduce((s, j) => s + j.due, 0);
-    const due30plus = dueJobs.filter(j => nowMs - j.date > 30 * 86400000).reduce((s, j) => s + j.due, 0);
-
-    // Top 3 profitable services (all time)
-    const serviceMap: Record<string, number> = {};
-    allJobs.filter(j => j.status !== 'cancelled').forEach(j => j.services.forEach(s => { serviceMap[s.serviceName] = (serviceMap[s.serviceName] || 0) + s.total; }));
-    const topServices = Object.entries(serviceMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
-
-    // Follow-up needed today
-    const pendingDue = dueJobs.filter(j => j.status === 'pending' || j.status === 'in-progress').length;
-    const overdueCount = dueJobs.filter(j => nowMs - j.date > 7 * 86400000).length;
-
-    return {
-      yesterdayIncome,
-      incomeVsYesterday: stats.todayIncome - yesterdayIncome,
-      thisWeekIncome, lastWeekIncome, weekGrowth,
-      due1to7, due8to30, due30plus,
-      topServices,
-      pendingDue, overdueCount,
-    };
-  }, [stats]);
-
-  const COLORS = ['#2563EB', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe'];
+  // Dark-mode safe colors (all visible on both light & dark)
+  const COLORS = ['#2563EB', '#3b82f6', '#60a5fa', '#F59E0B', '#22C55E', '#8B5CF6'];
   const netIncome = stats.todayIncome - stats.todayExpense;
+  const isDark = document.documentElement.classList.contains('dark');
+  const tooltipStyle = { background: isDark ? '#1E293B' : '#fff', border: 'none', borderRadius: 12, color: isDark ? '#F1F5F9' : '#0F172A', fontSize: 12 };
 
   // ═══ DESKTOP ═══
   if (!isMobile) {
@@ -109,7 +86,7 @@ export default function Dashboard({ navigate }: Props) {
           <div className="flex items-center gap-3">
             <button onClick={() => navigate('notifications')} className="relative w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center hover:shadow-md transition-all border border-gray-200" aria-label="নোটিফিকেশন">
               <Bell size={20} className="text-gray-600" />
-              {unreadCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 bg-danger rounded-full text-[10px] text-white font-bold flex items-center justify-center">{unreadCount > 9 ? '9+' : unreadCount}</span>}
+              {unreadCount > 0 && <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 bg-danger rounded-full text-[9px] text-white font-bold flex items-center justify-center">{unreadCount > 99 ? '99+' : unreadCount}</span>}
             </button>
             <button onClick={() => navigate('settings')} className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center hover:shadow-md transition-all border border-gray-200" aria-label="সেটিংস">
               <Settings size={20} className="text-gray-600" />
@@ -128,14 +105,14 @@ export default function Dashboard({ navigate }: Props) {
           <div className="bg-white rounded-2xl shadow-sm p-5 col-span-2 border border-gray-200/60">
             <h3 className="text-sm font-semibold text-gray-700 mb-4">📈 সাপ্তাহিক আয়ের ট্রেন্ড</h3>
             <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={weeklyTrend}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="date" tick={{ fontSize: 12 }} /><YAxis tick={{ fontSize: 12 }} /><Tooltip formatter={(v: any) => [`৳${v}`, 'আয়']} /><Line type="monotone" dataKey="income" stroke="#2563EB" strokeWidth={3} dot={{ fill: '#2563EB', r: 4 }} /></LineChart>
+              <LineChart data={weeklyTrend}><CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#f0f0f0'} /><XAxis dataKey="date" tick={{ fontSize: 12, fill: isDark ? '#94A3B8' : undefined }} /><YAxis tick={{ fontSize: 12, fill: isDark ? '#94A3B8' : undefined }} /><Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [`৳${v}`, 'আয়']} /><Line type="monotone" dataKey="income" stroke="#2563EB" strokeWidth={3} dot={{ fill: '#2563EB', r: 4 }} /></LineChart>
             </ResponsiveContainer>
           </div>
           <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-200/60">
             <h3 className="text-sm font-semibold text-gray-700 mb-4">📊 সেবা-wise আয়</h3>
             {serviceWiseIncome.length > 0 ? (
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={serviceWiseIncome} layout="vertical"><XAxis type="number" tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={60} /><Tooltip formatter={(v: any) => [`৳${v}`, 'আয়']} /><Bar dataKey="amount" radius={[0, 6, 6, 0]}>{serviceWiseIncome.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
+                <BarChart data={serviceWiseIncome} layout="vertical"><XAxis type="number" tick={{ fontSize: 10, fill: isDark ? '#94A3B8' : undefined }} /><YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: isDark ? '#94A3B8' : undefined }} width={60} /><Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [`৳${v}`, 'আয়']} /><Bar dataKey="amount" radius={[0, 6, 6, 0]}>{serviceWiseIncome.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
               </ResponsiveContainer>
             ) : <div className="h-[200px] flex items-center justify-center text-gray-400 text-sm">আজ কোনো আয় নেই</div>}
           </div>
@@ -375,7 +352,7 @@ export default function Dashboard({ navigate }: Props) {
           <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-200/60">
             <h3 className="text-sm font-semibold text-gray-600 mb-3">📊 আজকের সেবা-wise আয়</h3>
             <ResponsiveContainer width="100%" height={120}>
-              <BarChart data={serviceWiseIncome} layout="vertical"><XAxis type="number" tick={{ fontSize: 10 }} /><YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} width={50} /><Tooltip formatter={(v: any) => [`৳${v}`, 'আয়']} /><Bar dataKey="amount" radius={[0, 6, 6, 0]}>{serviceWiseIncome.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
+              <BarChart data={serviceWiseIncome} layout="vertical"><XAxis type="number" tick={{ fontSize: 10, fill: isDark ? '#94A3B8' : undefined }} /><YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: isDark ? '#94A3B8' : undefined }} width={50} /><Tooltip contentStyle={tooltipStyle} formatter={(v: any) => [`৳${v}`, 'আয়']} /><Bar dataKey="amount" radius={[0, 6, 6, 0]}>{serviceWiseIncome.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Bar></BarChart>
             </ResponsiveContainer>
           </div>
         </div>

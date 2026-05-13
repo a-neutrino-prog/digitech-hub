@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { getJobs, getCustomerById, formatTaka, formatDateShort, formatDate, deleteJob, updateJob } from '../store';
 import type { Page } from '../App';
 import useResponsive from '../hooks/useResponsive';
+import { usePageLoad } from '../hooks/useLoading';
+import { SkeletonJobList } from './ui/Skeleton';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
 import { Search, ChevronRight, Briefcase, Edit, Trash2, MoreVertical, Plus, Eye } from 'lucide-react';
@@ -26,9 +28,11 @@ const statusCfg: Record<string, { label: string; cls: string; bar: string }> = {
 };
 
 export default function JobList({ navigate }: Props) {
+  const loading = usePageLoad();
   const { isMobile } = useResponsive();
   const { toast } = useToast();
   const confirm = useConfirm();
+  if (loading) return <SkeletonJobList />;
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);

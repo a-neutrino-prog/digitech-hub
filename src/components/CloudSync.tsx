@@ -44,6 +44,7 @@ export default function CloudSync({ navigate, refresh }: Props) {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [online, setOnline] = useState(navigator.onLine);
+  const [showConflict, setShowConflict] = useState(false);
 
   useEffect(() => {
     if (!configured) return;
@@ -65,6 +66,7 @@ export default function CloudSync({ navigate, refresh }: Props) {
     setSyncStatus(result);
     setLastSync(getLastSyncTime());
     if (result === 'success') refresh();
+    if (result === 'error') setShowConflict(true);
     setTimeout(() => setSyncStatus(realtimeOn ? 'realtime' : 'idle'), 3000);
   }, [refresh, realtimeOn]);
 
@@ -450,6 +452,31 @@ export default function CloudSync({ navigate, refresh }: Props) {
               )}
             </div>
 
+            {/* Conflict Resolution */}
+            {showConflict && (
+              <div className="bg-orange-50 rounded-2xl border-2 border-orange-300 p-4 fade-in">
+                <div className="text-center mb-4">
+                  <div className="text-3xl mb-2">⚠️</div>
+                  <h3 className="text-sm font-bold text-orange-800">সিঙ্ক কনফ্লিক্ট</h3>
+                  <p className="text-xs text-orange-600 mt-1">লোকাল ও ক্লাউড ডেটায় পার্থক্য পাওয়া গেছে।</p>
+                </div>
+                <div className="space-y-2">
+                  <button onClick={async () => { setSyncStatus('syncing'); const ok = await uploadToCloud(); setSyncStatus(ok ? 'success' : 'error'); setShowConflict(false); if (ok) setLastSync(getLastSyncTime()); }}
+                    className="w-full py-3 bg-white border-2 border-blue-200 text-blue-700 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    📤 লোকাল ডেটা রাখুন (ক্লাউডে আপলোড)
+                  </button>
+                  <button onClick={async () => { setSyncStatus('syncing'); const ok = await downloadFromCloud(); setSyncStatus(ok ? 'success' : 'error'); setShowConflict(false); if (ok) { refresh(); setLastSync(getLastSyncTime()); } }}
+                    className="w-full py-3 bg-white border-2 border-green-200 text-green-700 rounded-xl font-semibold text-xs flex items-center justify-center gap-2 active:scale-95 transition-all">
+                    📥 ক্লাউড ডেটা রাখুন (লোকাল রিপ্লেস)
+                  </button>
+                  <button onClick={() => setShowConflict(false)}
+                    className="w-full py-2 text-gray-500 text-xs font-medium">
+                    পরে সমাধান করব
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Sign Out */}
             <button onClick={handleSignOut}
               className="w-full py-3 bg-red-50 text-red-600 rounded-2xl font-medium text-sm flex items-center justify-center gap-2 border border-red-200">
@@ -458,13 +485,12 @@ export default function CloudSync({ navigate, refresh }: Props) {
 
             {/* Info */}
             <div className="bg-blue-50 rounded-2xl p-4 border border-blue-200">
-              <h4 className="text-xs font-semibold text-blue-700 mb-2">⚡ রিয়েলটাইম সিঙ্ক কিভাবে কাজ করে?</h4>
+              <h4 className="text-xs font-semibold text-blue-700 mb-2">⚡ সিঙ্ক কিভাবে কাজ করে?</h4>
               <ul className="text-[11px] text-blue-600 space-y-1">
                 <li>• <strong>রিয়েলটাইম:</strong> ডেটা পরিবর্তন হলে সাথে সাথে সব ডিভাইসে আপডেট</li>
-                <li>• <strong>অটো-আপলোড:</strong> localStorage পরিবর্তন হলে ১.৫ সেকেন্ড পরে ক্লাউডে আপলোড</li>
-                <li>• <strong>অটো-ডাউনলোড:</strong> অন্য ডিভাইস থেকে পরিবর্তন হলে তাৎক্ষণিক ডাউনলোড</li>
+                <li>• <strong>অটো-আপলোড:</strong> localStorage পরিবর্তন হলে ২ সেকেন্ড পরে ক্লাউডে আপলোড</li>
+                <li>• <strong>কনফ্লিক্ট:</strong> সমস্যা হলে আপনি নিজে সিদ্ধান্ত নিতে পারবেন কোন ডেটা রাখবেন</li>
                 <li>• <strong>অফলাইন:</strong> ইন্টারনেট না থাকলে লোকালে কাজ, ফিরলে সিঙ্ক</li>
-                <li>• <strong>কনফ্লিক্ট:</strong> Last-write-wins + Device ID চেক</li>
               </ul>
             </div>
           </>

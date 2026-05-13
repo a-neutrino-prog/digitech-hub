@@ -26,6 +26,7 @@ export default function PinLock({ onUnlock }: Props) {
   const [lockedUntil, setLockedUntil] = useState(getSavedLockout());
   const [countdown, setCountdown] = useState(0);
   const [showForgot, setShowForgot] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   const isLocked = lockedUntil > Date.now();
 
@@ -80,12 +81,10 @@ export default function PinLock({ onUnlock }: Props) {
   };
 
   const handleEmergencyReset = () => {
-    if (window.confirm('⚠️ PIN রিসেট করলে PIN বন্ধ হয়ে যাবে। আপনি কি নিশ্চিত?')) {
-      localStorage.removeItem('pin_code');
-      localStorage.removeItem(LOCKOUT_KEY);
-      localStorage.removeItem(ATTEMPTS_KEY);
-      onUnlock();
-    }
+    localStorage.removeItem('pin_code');
+    localStorage.removeItem(LOCKOUT_KEY);
+    localStorage.removeItem(ATTEMPTS_KEY);
+    onUnlock();
   };
 
   const digits = ['1','2','3','4','5','6','7','8','9','','0','del'];
@@ -147,19 +146,29 @@ export default function PinLock({ onUnlock }: Props) {
         {showForgot && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-6 fade-in" style={{ background: 'rgba(0,0,0,0.6)' }}>
             <div className="bg-white rounded-3xl p-6 max-w-sm w-full text-center">
-              <div className="text-4xl mb-3">🔑</div>
-              <h3 className="text-lg font-bold text-gray-800 mb-2">PIN ভুলে গেছেন?</h3>
-              <p className="text-sm text-gray-500 mb-6 leading-relaxed">
-                PIN রিসেট করলে অ্যাপ আনলক হবে এবং PIN বন্ধ হয়ে যাবে। পরে সেটিংস থেকে নতুন PIN সেট করতে পারবেন।
-              </p>
-              <div className="flex gap-3">
-                <button onClick={() => setShowForgot(false)} className="flex-1 py-3 rounded-2xl font-semibold text-sm bg-gray-100 text-gray-700 border border-gray-200 active:scale-[0.97] transition-all">
-                  বাতিল
-                </button>
-                <button onClick={handleEmergencyReset} className="flex-1 py-3 rounded-2xl font-semibold text-sm text-white active:scale-[0.97] transition-all" style={{ background: 'linear-gradient(135deg, #F43F5E, #BE123C)' }}>
-                  PIN রিসেট করুন
-                </button>
-              </div>
+              {!showResetConfirm ? (
+                <>
+                  <div className="text-4xl mb-3">🔑</div>
+                  <h3 className="text-lg font-bold text-gray-800 mb-2">PIN ভুলে গেছেন?</h3>
+                  <p className="text-sm text-gray-500 mb-6 leading-relaxed">
+                    PIN রিসেট করলে অ্যাপ আনলক হবে এবং PIN বন্ধ হয়ে যাবে। পরে সেটিংস থেকে নতুন PIN সেট করতে পারবেন।
+                  </p>
+                  <div className="flex gap-3">
+                    <button onClick={() => setShowForgot(false)} className="flex-1 py-3 rounded-2xl font-semibold text-sm bg-gray-100 text-gray-700 border border-gray-200 active:scale-[0.97] transition-all">বাতিল</button>
+                    <button onClick={() => setShowResetConfirm(true)} className="flex-1 py-3 rounded-2xl font-semibold text-sm text-white active:scale-[0.97] transition-all" style={{ background: 'linear-gradient(135deg, #2563EB, #1D4ED8)' }}>এগিয়ে যান</button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="text-4xl mb-3">⚠️</div>
+                  <h3 className="text-lg font-bold text-gray-800 mb-2">PIN রিসেট করবেন?</h3>
+                  <p className="text-sm text-gray-500 mb-6 leading-relaxed">নিশ্চিত করলে PIN মুছে যাবে এবং অ্যাপ আনলক হবে।</p>
+                  <div className="flex gap-3">
+                    <button onClick={() => setShowResetConfirm(false)} className="flex-1 py-3 rounded-2xl font-semibold text-sm bg-gray-100 text-gray-700 border border-gray-200 active:scale-[0.97] transition-all">পিছনে</button>
+                    <button onClick={handleEmergencyReset} className="flex-1 py-3 rounded-2xl font-semibold text-sm text-white active:scale-[0.97] transition-all" style={{ background: 'linear-gradient(135deg, #F43F5E, #BE123C)' }}>PIN রিসেট করুন</button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

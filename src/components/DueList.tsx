@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { getJobs, getCustomerById, addPaymentToJob, formatTaka, formatDateShort, formatDate, getDueTracker, addDueFollowUp, refreshDueStatuses, DUE_STATUS_CONFIG, type DueStatus } from '../store';
 import { useToast } from '../hooks/useToast';
 import type { Page } from '../App';
@@ -22,7 +22,9 @@ export default function DueList({ navigate }: Props) {
   const [statusFilter, setStatusFilter] = useState<'all' | DueStatus>('all');
 
   // Refresh overdue statuses
-  useMemo(() => refreshDueStatuses(), [ver]);
+  useEffect(() => {
+    refreshDueStatuses();
+  }, [ver]);
 
   const dueData = useMemo(() => {
     const jobs = getJobs().filter(j => j.due > 0 && j.status !== 'cancelled');

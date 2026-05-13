@@ -11,13 +11,15 @@ interface Props {
   navigate: (page: Page, params?: Record<string, string>) => void;
 }
 
-type Period = 'day' | 'week' | 'month' | 'year';
+type Period = 'day' | 'week' | 'month' | 'year' | 'custom';
 
 export default function Reports({ navigate }: Props) {
   const { isMobile } = useResponsive();
   const { toast } = useToast();
   const [period, setPeriod] = useState<Period>('month');
-
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [compareMode, setCompareMode] = useState(false);
 
   const transactions = useMemo(() => getTransactions(), []);
   const jobs = useMemo(() => getJobs(), []);
@@ -27,10 +29,12 @@ export default function Reports({ navigate }: Props) {
     'week': 'গত ৭ দিন',
     'month': 'এই মাস',
     'year': 'এই বছর',
+    'custom': 'কাস্টম',
   };
 
   // Filter by period
   const periodStart = useMemo(() => {
+    if (period === 'custom' && customFrom) return new Date(customFrom).getTime();
     const d = new Date();
     switch (period) {
       case 'day':
@@ -48,14 +52,36 @@ export default function Reports({ navigate }: Props) {
         d.setHours(0, 0, 0, 0);
         return d.getTime();
     }
-  }, [period]);
+  }, [period, customFrom]);
 
-  const filteredTx = transactions.filter(t => t.date >= periodStart);
-  const filteredJobs = jobs.filter(j => j.date >= periodStart);
+  const periodEnd = useMemo(() => {
+    if (period === 'custom' && customTo) return new Date(customTo).getTime() + 86400000;
+    return Date.now() + 86400000;
+  }, [period, customTo]);
+
+  const start = periodStart || 0;
+  const end = periodEnd;
+
+  const filteredTx = transactions.filter(t => t.date >= start && t.date < end);
+  const filteredJobs = jobs.filter(j => j.date >= start && j.date < end);
 
   const totalIncome = filteredTx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const totalExpense = filteredTx.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const profit = totalIncome - totalExpense;
+
+  // Compare mode — previous period same duration
+  const comparePeriod = useMemo(() => {
+    if (!compareMode) return null;
+    const duration = end - start;
+    const prevStart = start - duration;
+    const prevEnd = start;
+    const prevTx = transactions.filter(t => t.date >= prevStart && t.date < prevEnd);
+    const prevIncome = prevTx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const prevExpense = prevTx.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
+    const incomeChange = prevIncome > 0 ? Math.round(((totalIncome - prevIncome) / prevIncome) * 100) : 0;
+    const expenseChange = prevExpense > 0 ? Math.round(((totalExpense - prevExpense) / prevExpense) * 100) : 0;
+    return { prevIncome, prevExpense, incomeChange, expenseChange };
+  }, [compareMode, start, end, transactions, totalIncome, totalExpense]);
 
   // Service-wise income
   const serviceIncome = useMemo(() => {
@@ -157,20 +183,41 @@ export default function Reports({ navigate }: Props) {
       </div>
 
       {/* Period Selector */}
-      {/* Period Selector */}
-      <div className="px-4 py-3">
+      <div className="px-4 py-3 space-y-3">
         <div className="flex gap-1.5 bg-white rounded-2xl p-1.5 border border-gray-200/60">
           {([
             { value: 'day', label: 'আজ' },
             { value: 'week', label: 'সপ্তাহ' },
             { value: 'month', label: 'মাস' },
             { value: 'year', label: 'বছর' },
+            { value: 'custom', label: '📅 কাস্টম' },
           ] as { value: Period; label: string }[]).map(opt => (
             <button key={opt.value} onClick={() => setPeriod(opt.value)}
               className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${
                 period === opt.value ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50'
               }`}>{opt.label}</button>
           ))}
+        </div>
+
+        {/* Custom Date Range */}
+        {period === 'custom' && (
+          <div className="bg-white rounded-2xl border border-gray-200/60 p-3 flex gap-2 items-center fade-in">
+            <input type="date" value={customFrom} onChange={e => setCustomFrom(e.target.value)} className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs form-input-wc" />
+            <span className="text-gray-400 text-xs">→</span>
+            <input type="date" value={customTo} onChange={e => setCustomTo(e.target.value)} className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs form-input-wc" />
+          </div>
+        )}
+
+        {/* Compare Toggle */}
+        <div className="flex items-center justify-between bg-white rounded-2xl border border-gray-200/60 px-4 py-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-700">📊 তুলনা মোড</p>
+            <p className="text-[10px] text-gray-400">আগের সময়ের সাথে তুলনা করুন</p>
+          </div>
+          <button onClick={() => setCompareMode(!compareMode)}
+            className={`w-12 h-6 rounded-full transition-all relative ${compareMode ? 'bg-primary' : 'bg-gray-300'}`}>
+            <div className={`w-5 h-5 rounded-full bg-white shadow-sm absolute top-0.5 transition-all ${compareMode ? 'left-6' : 'left-0.5'}`} />
+          </button>
         </div>
       </div>
 
@@ -180,18 +227,29 @@ export default function Reports({ navigate }: Props) {
           <div className="bg-white rounded-2xl border border-gray-200/60 p-3 text-center">
             <p className="text-[10px] text-gray-400">আয়</p>
             <p className="text-sm font-bold text-success">{formatTaka(totalIncome)}</p>
+            {comparePeriod && <p className={`text-[9px] mt-0.5 font-semibold ${comparePeriod.incomeChange >= 0 ? 'text-success' : 'text-danger'}`}>{comparePeriod.incomeChange >= 0 ? '↑' : '↓'}{Math.abs(comparePeriod.incomeChange)}% আগের চেয়ে</p>}
           </div>
           <div className="bg-white rounded-2xl border border-gray-200/60 p-3 text-center">
             <p className="text-[10px] text-gray-400">ব্যয়</p>
             <p className="text-sm font-bold text-danger">{formatTaka(totalExpense)}</p>
+            {comparePeriod && <p className={`text-[9px] mt-0.5 font-semibold ${comparePeriod.expenseChange <= 0 ? 'text-success' : 'text-danger'}`}>{comparePeriod.expenseChange >= 0 ? '↑' : '↓'}{Math.abs(comparePeriod.expenseChange)}%</p>}
           </div>
           <div className="bg-white rounded-2xl border border-gray-200/60 p-3 text-center">
             <p className="text-[10px] text-gray-400">{profit >= 0 ? 'লাভ' : 'ক্ষতি'}</p>
-            <p className={`text-sm font-bold ${profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-              {formatTaka(Math.abs(profit))}
-            </p>
+            <p className={`text-sm font-bold ${profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{formatTaka(Math.abs(profit))}</p>
           </div>
         </div>
+
+        {/* Compare Detail */}
+        {comparePeriod && (
+          <div className="bg-blue-50 rounded-2xl border border-blue-200/60 p-4 fade-in">
+            <p className="text-[11px] font-semibold text-blue-700 uppercase tracking-wider mb-2">📊 আগের সময়ের সাথে তুলনা</p>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div><p className="text-gray-500">আগের আয়</p><p className="font-bold text-gray-700">{formatTaka(comparePeriod.prevIncome)}</p></div>
+              <div><p className="text-gray-500">আগের ব্যয়</p><p className="font-bold text-gray-700">{formatTaka(comparePeriod.prevExpense)}</p></div>
+            </div>
+          </div>
+        )}
 
         {/* Jobs Summary */}
         <div className="bg-white rounded-2xl shadow-sm p-4">

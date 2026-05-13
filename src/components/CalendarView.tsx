@@ -128,7 +128,7 @@ export default function CalendarView({ navigate }: Props) {
                 <button
                   key={i}
                   onClick={() => setSelectedDate(new Date(year, month, day))}
-                  className={`relative p-1 rounded-xl text-center transition-all min-h-[52px] flex flex-col items-center justify-start ${
+                  className={`relative p-1 rounded-xl text-center transition-all min-h-[44px] min-w-[44px] flex flex-col items-center justify-start active:scale-95 ${
                     selectedClass
                       ? 'bg-primary text-white shadow-md'
                       : todayClass

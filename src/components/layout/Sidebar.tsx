@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { getShopInfo, getUpcomingReminders } from '../../store';
 import type { Page } from '../../App';
 import { Home, Briefcase, Users, FileText, PieChart, Bell, Settings, Clock, AlertTriangle, Plus, Calendar, Cloud } from 'lucide-react';
@@ -27,8 +28,16 @@ const QUICK_ACTIONS: { id: Page; icon: React.ReactNode; label: string; color: st
 ];
 
 export default function Sidebar({ currentPage, navigate, collapsed = false }: Props) {
-  const shopInfo = getShopInfo();
-  const upcomingReminders = getUpcomingReminders().slice(0, 3);
+  const [shopInfo, setShopInfo] = useState(getShopInfo);
+  const [upcomingReminders, setUpcomingReminders] = useState(() => getUpcomingReminders().slice(0, 3));
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setShopInfo(getShopInfo());
+      setUpcomingReminders(getUpcomingReminders().slice(0, 3));
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   return (
     <aside className={`bg-white border-r border-gray-200 h-screen flex flex-col transition-all duration-300 ${
