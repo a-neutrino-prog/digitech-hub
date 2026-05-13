@@ -18,8 +18,9 @@ import ReminderList from './components/ReminderList';
 import ReminderForm from './components/ReminderForm';
 import CalendarView from './components/CalendarView';
 import CloudSync from './components/CloudSync';
-import { isPinEnabled, getDarkMode } from './store';
+import { isPinEnabled, getDarkMode, isOnboardingComplete } from './store';
 import { initSync } from './firebase/sync';
+import Onboarding from './components/Onboarding';
 
 export type Page =
   | 'dashboard'
@@ -51,6 +52,7 @@ export default function App() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [locked, setLocked] = useState(isPinEnabled());
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [showOnboarding, setShowOnboarding] = useState(!isOnboardingComplete());
 
   // Init dark mode + online status + Firebase sync
   useEffect(() => {
@@ -84,6 +86,11 @@ export default function App() {
   const refresh = useCallback(() => {
     setRefreshKey(k => k + 1);
   }, []);
+
+  // Onboarding (first time)
+  if (showOnboarding) {
+    return <Onboarding onComplete={() => setShowOnboarding(false)} />;
+  }
 
   // PIN Lock Screen
   if (locked) {

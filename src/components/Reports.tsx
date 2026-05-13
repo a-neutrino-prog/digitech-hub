@@ -137,44 +137,36 @@ export default function Reports({ navigate }: Props) {
   return (
     <div className={`bg-gray-100 min-h-screen ${!isMobile ? 'p-0' : ''}`}>
       {/* Header */}
-      <div className={`bg-white shadow-sm flex items-center justify-between ${isMobile ? 'px-4 pt-4 pb-3' : 'px-6 py-4 rounded-2xl mb-6'}`}>
+      <div className={`bg-white flex items-center justify-between ${isMobile ? 'px-4 pt-4 pb-3 border-b border-gray-200/60' : 'px-6 py-4 rounded-2xl border border-gray-200/60 mb-6'}`}>
         <div className="flex items-center gap-3">
           {isMobile && (
-            <button onClick={() => navigate('dashboard')} className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">
+            <button onClick={() => navigate('dashboard')} className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center" aria-label="ফিরে যান">
               <ArrowLeft size={18} className="text-gray-600" />
             </button>
           )}
           <h2 className={`font-bold text-gray-800 ${isMobile ? 'text-lg' : 'text-2xl'}`}>📊 রিপোর্ট ও বিশ্লেষণ</h2>
         </div>
-        <button
-          onClick={handleExportPDF}
-          className="flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-dark transition-colors"
-        >
-          <Download size={16} />
-          PDF ডাউনলোড
+        <button onClick={handleExportPDF}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-white active:scale-95 transition-all"
+          style={{ background: 'linear-gradient(135deg, #2563EB, #1D4ED8)', boxShadow: '0 6px 20px rgba(37,99,235,0.2)' }}>
+          <Download size={16} /> PDF
         </button>
       </div>
 
       {/* Period Selector */}
+      {/* Period Selector */}
       <div className="px-4 py-3">
-        <div className="flex gap-1.5 bg-white rounded-xl p-1 shadow-sm">
+        <div className="flex gap-1.5 bg-white rounded-2xl p-1.5 border border-gray-200/60">
           {([
             { value: 'day', label: 'আজ' },
             { value: 'week', label: 'সপ্তাহ' },
             { value: 'month', label: 'মাস' },
             { value: 'year', label: 'বছর' },
           ] as { value: Period; label: string }[]).map(opt => (
-            <button
-              key={opt.value}
-              onClick={() => setPeriod(opt.value)}
-              className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${
-                period === opt.value
-                  ? 'bg-primary text-white shadow-sm'
-                  : 'text-gray-500 hover:bg-gray-50'
-              }`}
-            >
-              {opt.label}
-            </button>
+            <button key={opt.value} onClick={() => setPeriod(opt.value)}
+              className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all ${
+                period === opt.value ? 'bg-primary text-white shadow-sm' : 'text-gray-500 hover:bg-gray-50'
+              }`}>{opt.label}</button>
           ))}
         </div>
       </div>
@@ -182,15 +174,15 @@ export default function Reports({ navigate }: Props) {
       <div className="px-4 space-y-3 pb-6">
         {/* Summary Cards */}
         <div className="grid grid-cols-3 gap-2">
-          <div className="bg-white rounded-xl shadow-sm p-3 text-center">
+          <div className="bg-white rounded-2xl border border-gray-200/60 p-3 text-center">
             <p className="text-[10px] text-gray-400">আয়</p>
-            <p className="text-sm font-bold text-green-600">{formatTaka(totalIncome)}</p>
+            <p className="text-sm font-bold text-success">{formatTaka(totalIncome)}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-3 text-center">
+          <div className="bg-white rounded-2xl border border-gray-200/60 p-3 text-center">
             <p className="text-[10px] text-gray-400">ব্যয়</p>
-            <p className="text-sm font-bold text-red-600">{formatTaka(totalExpense)}</p>
+            <p className="text-sm font-bold text-danger">{formatTaka(totalExpense)}</p>
           </div>
-          <div className="bg-white rounded-xl shadow-sm p-3 text-center">
+          <div className="bg-white rounded-2xl border border-gray-200/60 p-3 text-center">
             <p className="text-[10px] text-gray-400">{profit >= 0 ? 'লাভ' : 'ক্ষতি'}</p>
             <p className={`text-sm font-bold ${profit >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
               {formatTaka(Math.abs(profit))}

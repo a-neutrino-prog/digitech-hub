@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { getDashboardStats, getJobs, getNotifications, getShopInfo, getCustomerById, getUpcomingReminders, formatTaka, toBanglaNum, isToday, getTodayStart, getTodayEnd, type Job } from '../store';
+import { getDashboardStats, getJobs, getTransactions, getNotifications, getShopInfo, getCustomerById, getUpcomingReminders, formatTaka, toBanglaNum, isToday, getTodayStart, getTodayEnd, type Job } from '../store';
 import type { Page } from '../App';
 import useResponsive from '../hooks/useResponsive';
 import { getGreeting, getGreetingEmoji } from '../utils/greeting';
@@ -50,6 +50,50 @@ export default function Dashboard({ navigate }: Props) {
     return days;
   }, []);
 
+  // ═══ SMART ANALYTICS ═══
+  const smartInsights = useMemo(() => {
+    const allJobs = getJobs();
+    const allTxs = getTransactions();
+    const now = new Date();
+
+    // গতকালের আয়
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
+    const yTxs = allTxs.filter(t => t.date >= yesterday.getTime() && t.date < yesterday.getTime() + 86400000);
+    const yesterdayIncome = yTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+
+    // এই সপ্তাহ vs গত সপ্তাহ
+    const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() - weekStart.getDay()); weekStart.setHours(0,0,0,0);
+    const lastWeekStart = new Date(weekStart); lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+    const thisWeekIncome = allTxs.filter(t => t.type === 'income' && t.date >= weekStart.getTime()).reduce((s, t) => s + t.amount, 0);
+    const lastWeekIncome = allTxs.filter(t => t.type === 'income' && t.date >= lastWeekStart.getTime() && t.date < weekStart.getTime()).reduce((s, t) => s + t.amount, 0);
+    const weekGrowth = lastWeekIncome > 0 ? Math.round(((thisWeekIncome - lastWeekIncome) / lastWeekIncome) * 100) : 0;
+
+    // Due aging
+    const dueJobs = allJobs.filter(j => j.due > 0 && j.status !== 'cancelled');
+    const nowMs = Date.now();
+    const due1to7 = dueJobs.filter(j => nowMs - j.date <= 7 * 86400000).reduce((s, j) => s + j.due, 0);
+    const due8to30 = dueJobs.filter(j => { const age = nowMs - j.date; return age > 7 * 86400000 && age <= 30 * 86400000; }).reduce((s, j) => s + j.due, 0);
+    const due30plus = dueJobs.filter(j => nowMs - j.date > 30 * 86400000).reduce((s, j) => s + j.due, 0);
+
+    // Top 3 profitable services (all time)
+    const serviceMap: Record<string, number> = {};
+    allJobs.filter(j => j.status !== 'cancelled').forEach(j => j.services.forEach(s => { serviceMap[s.serviceName] = (serviceMap[s.serviceName] || 0) + s.total; }));
+    const topServices = Object.entries(serviceMap).sort((a, b) => b[1] - a[1]).slice(0, 3);
+
+    // Follow-up needed today
+    const pendingDue = dueJobs.filter(j => j.status === 'pending' || j.status === 'in-progress').length;
+    const overdueCount = dueJobs.filter(j => nowMs - j.date > 7 * 86400000).length;
+
+    return {
+      yesterdayIncome,
+      incomeVsYesterday: stats.todayIncome - yesterdayIncome,
+      thisWeekIncome, lastWeekIncome, weekGrowth,
+      due1to7, due8to30, due30plus,
+      topServices,
+      pendingDue, overdueCount,
+    };
+  }, [stats]);
+
   const COLORS = ['#2563EB', '#3b82f6', '#60a5fa', '#93c5fd', '#bfdbfe', '#dbeafe'];
   const netIncome = stats.todayIncome - stats.todayExpense;
 
@@ -74,8 +118,8 @@ export default function Dashboard({ navigate }: Props) {
         </div>
 
         <div className={`grid gap-4 ${isDesktop ? 'grid-cols-4' : 'grid-cols-2'}`}>
-          <StatCardNew icon="💰" label="আজকের আয়" value={formatTaka(stats.todayIncome)} sub={`${stats.todayJobsTotal}টি লেনদেন`} className="income" />
-          <StatCardNew icon="📉" label="আজকের ব্যয়" value={formatTaka(stats.todayExpense)} className="expense" />
+          <StatCardNew icon="💰" label="আজকের আয়" value={formatTaka(stats.todayIncome)} sub={smartInsights.incomeVsYesterday >= 0 ? `📈 গতকালের চেয়ে ৳${Math.abs(smartInsights.incomeVsYesterday)} বেশি` : `📉 গতকালের চেয়ে ৳${Math.abs(smartInsights.incomeVsYesterday)} কম`} className="income" />
+          <StatCardNew icon="📉" label="আজকের ব্যয়" value={formatTaka(stats.todayExpense)} sub={`সাপ্তাহিক ${smartInsights.weekGrowth >= 0 ? '↑' : '↓'}${Math.abs(smartInsights.weekGrowth)}%`} className="expense" />
           <StatCardNew icon="⚠️" label="মোট বাকি" value={formatTaka(stats.totalDue)} sub={`${topDueCustomers.length}জন গ্রাহক`} className="due" onClick={() => navigate('due-list')} />
           <StatCardNew icon="💼" label="আজকের কাজ" value={`${toBanglaNum(stats.todayJobsTotal)}টি`} sub={`পেন্ডিং ${toBanglaNum(stats.pendingJobs)} | সম্পন্ন ${toBanglaNum(stats.completedJobs)}`} className="jobs" onClick={() => navigate('jobs')} />
         </div>
@@ -115,6 +159,19 @@ export default function Dashboard({ navigate }: Props) {
               ))}
             </div>
             <UpcomingRemindersCard navigate={navigate} />
+
+            {/* Due Aging — Desktop */}
+            {(smartInsights.due1to7 > 0 || smartInsights.due8to30 > 0 || smartInsights.due30plus > 0) && (
+              <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-200/60">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">⏳ বাকি বয়স</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center"><span className="text-xs text-gray-500">১-৭ দিন</span><span className="text-xs font-bold text-success">{formatTaka(smartInsights.due1to7)}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-xs text-gray-500">৮-৩০ দিন</span><span className="text-xs font-bold text-warning">{formatTaka(smartInsights.due8to30)}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-xs text-gray-500">৩০+ দিন</span><span className="text-xs font-bold text-danger">{formatTaka(smartInsights.due30plus)}</span></div>
+                </div>
+                {smartInsights.overdueCount > 0 && <p className="text-[10px] text-danger bg-danger-light rounded-lg px-2 py-1 mt-2 font-semibold text-center">{smartInsights.overdueCount}টি ওভারডিউ — ফলো-আপ দরকার</p>}
+              </div>
+            )}
           </div>
         </div>
 
@@ -237,6 +294,77 @@ export default function Dashboard({ navigate }: Props) {
           <div className="text-left"><p className="text-sm font-semibold text-gray-800">রিমাইন্ডার</p><p className="text-[10px] text-gray-400">মনে করিয়ে দিন</p></div>
         </button>
       </div>
+
+      {/* Smart Insights */}
+      <div className="px-4 mt-3">
+        <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-200/60">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">💡 স্মার্ট ইনসাইট</p>
+
+          {/* Yesterday comparison */}
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <span className="text-xs text-gray-500">গতকালের চেয়ে</span>
+            <span className={`text-xs font-bold ${smartInsights.incomeVsYesterday >= 0 ? 'text-success' : 'text-danger'}`}>
+              {smartInsights.incomeVsYesterday >= 0 ? '📈' : '📉'} {formatTaka(Math.abs(smartInsights.incomeVsYesterday))} {smartInsights.incomeVsYesterday >= 0 ? 'বেশি' : 'কম'}
+            </span>
+          </div>
+
+          {/* Week growth */}
+          <div className="flex items-center justify-between py-2 border-b border-gray-100">
+            <span className="text-xs text-gray-500">সাপ্তাহিক গ্রোথ</span>
+            <span className={`text-xs font-bold ${smartInsights.weekGrowth >= 0 ? 'text-success' : 'text-danger'}`}>
+              {smartInsights.weekGrowth >= 0 ? '↑' : '↓'} {Math.abs(smartInsights.weekGrowth)}%
+            </span>
+          </div>
+
+          {/* Follow-up needed */}
+          {(smartInsights.pendingDue > 0 || smartInsights.overdueCount > 0) && (
+            <div className="flex items-center justify-between py-2 border-b border-gray-100">
+              <span className="text-xs text-gray-500">ফলো-আপ দরকার</span>
+              <div className="flex gap-2">
+                {smartInsights.pendingDue > 0 && <span className="text-[10px] bg-warning-light text-warning-dark px-2 py-0.5 rounded-full font-semibold">{smartInsights.pendingDue} পেন্ডিং</span>}
+                {smartInsights.overdueCount > 0 && <span className="text-[10px] bg-danger-light text-danger-dark px-2 py-0.5 rounded-full font-semibold">{smartInsights.overdueCount} ওভারডিউ</span>}
+              </div>
+            </div>
+          )}
+
+          {/* Top services */}
+          {smartInsights.topServices.length > 0 && (
+            <div className="pt-2">
+              <p className="text-[10px] text-gray-400 mb-1.5">🏆 টপ সেবা</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {smartInsights.topServices.map(([name], i) => (
+                  <span key={i} className="text-[10px] bg-primary-50 text-primary px-2 py-1 rounded-lg font-medium">
+                    {i === 0 ? '🥇' : i === 1 ? '🥈' : '🥉'} {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Due Aging */}
+      {(smartInsights.due1to7 > 0 || smartInsights.due8to30 > 0 || smartInsights.due30plus > 0) && (
+        <div className="px-4 mt-3">
+          <div className="bg-white rounded-2xl shadow-sm p-4 border border-gray-200/60">
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-3">⏳ বাকি বয়স বিশ্লেষণ</p>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-green-50 rounded-xl p-2.5 text-center">
+                <p className="text-[10px] text-gray-500">১-৭ দিন</p>
+                <p className="text-sm font-bold text-success">{formatTaka(smartInsights.due1to7)}</p>
+              </div>
+              <div className="bg-yellow-50 rounded-xl p-2.5 text-center">
+                <p className="text-[10px] text-gray-500">৮-৩০ দিন</p>
+                <p className="text-sm font-bold text-warning">{formatTaka(smartInsights.due8to30)}</p>
+              </div>
+              <div className="bg-red-50 rounded-xl p-2.5 text-center">
+                <p className="text-[10px] text-gray-500">৩০+ দিন</p>
+                <p className="text-sm font-bold text-danger">{formatTaka(smartInsights.due30plus)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Reminders */}
       <UpcomingRemindersMobile navigate={navigate} />
