@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { getDashboardStats, getJobs, getTransactions, getNotifications, getShopInfo, getCustomerById, getUpcomingReminders, formatTaka, toBanglaNum, isToday, getTodayStart, getTodayEnd, type Job } from '../store';
 import { usePageLoad } from '../hooks/useLoading';
 import { SkeletonDashboard } from './ui/Skeleton';
@@ -18,59 +18,63 @@ export default function Dashboard({ navigate }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
 
+  // All data computed once per mount (key={refreshKey} ensures remount on data change)
+  // Must be BEFORE any conditional return (React hooks rule)
+  const data = useMemo(() => {
+    const shopInfo = getShopInfo();
+    const stats = getDashboardStats();
+    const allJobs = getJobs();
+    const allTxs = getTransactions();
+    const unreadCount = getNotifications().filter(n => !n.read).length;
+    const todayJobs: Job[] = allJobs.filter(j => isToday(j.date)).sort((a, b) => b.createdAt - a.createdAt);
+
+    const todayStart = getTodayStart(), todayEnd = getTodayEnd();
+    const jobsToday = allJobs.filter(j => j.date >= todayStart && j.date <= todayEnd && j.status !== 'cancelled');
+    const svcMap: Record<string, number> = {};
+    jobsToday.forEach(job => job.services.forEach(s => { svcMap[s.serviceName] = (svcMap[s.serviceName] || 0) + s.total; }));
+    const serviceWiseIncome = Object.entries(svcMap).map(([name, amount]) => ({ name: name.length > 8 ? name.slice(0, 8) + '..' : name, fullName: name, amount })).sort((a, b) => b.amount - a.amount).slice(0, 6);
+
+    const dueMap: Record<string, number> = {};
+    allJobs.filter(j => j.due > 0 && j.status !== 'cancelled').forEach(j => { dueMap[j.customerId] = (dueMap[j.customerId] || 0) + j.due; });
+    const topDueCustomers = Object.entries(dueMap).map(([id, due]) => ({ customer: getCustomerById(id), due })).filter(x => x.customer).sort((a, b) => b.due - a.due).slice(0, 5);
+
+    const weeklyTrend: { date: string; income: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0,0,0,0);
+      const dj = allJobs.filter(j => j.date >= d.getTime() && j.date < d.getTime() + 86400000 && j.status !== 'cancelled');
+      weeklyTrend.push({ date: d.toLocaleDateString('bn-BD', { weekday: 'short' }), income: dj.reduce((s, j) => s + j.totalAmount - j.due, 0) });
+    }
+
+    const now = new Date();
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
+    const yInc = allTxs.filter(t => t.date >= yesterday.getTime() && t.date < yesterday.getTime() + 86400000 && t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const wkStart = new Date(now); wkStart.setDate(wkStart.getDate() - wkStart.getDay()); wkStart.setHours(0,0,0,0);
+    const lwStart = new Date(wkStart); lwStart.setDate(lwStart.getDate() - 7);
+    const twInc = allTxs.filter(t => t.type === 'income' && t.date >= wkStart.getTime()).reduce((s, t) => s + t.amount, 0);
+    const lwInc = allTxs.filter(t => t.type === 'income' && t.date >= lwStart.getTime() && t.date < wkStart.getTime()).reduce((s, t) => s + t.amount, 0);
+    const wkGr = lwInc > 0 ? Math.round(((twInc - lwInc) / lwInc) * 100) : 0;
+    const dueJobs = allJobs.filter(j => j.due > 0 && j.status !== 'cancelled');
+    const ms = Date.now();
+    const d7 = dueJobs.filter(j => ms - j.date <= 7 * 86400000).reduce((s, j) => s + j.due, 0);
+    const d30 = dueJobs.filter(j => { const a = ms - j.date; return a > 7 * 86400000 && a <= 30 * 86400000; }).reduce((s, j) => s + j.due, 0);
+    const d30p = dueJobs.filter(j => ms - j.date > 30 * 86400000).reduce((s, j) => s + j.due, 0);
+    const sAll: Record<string, number> = {};
+    allJobs.filter(j => j.status !== 'cancelled').forEach(j => j.services.forEach(s => { sAll[s.serviceName] = (sAll[s.serviceName] || 0) + s.total; }));
+    const topSvc = Object.entries(sAll).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const pDue = dueJobs.filter(j => j.status === 'pending' || j.status === 'in-progress').length;
+    const oDue = dueJobs.filter(j => ms - j.date > 7 * 86400000).length;
+
+    return {
+      shopInfo, stats, todayJobs, unreadCount, serviceWiseIncome, topDueCustomers, weeklyTrend,
+      netIncome: stats.todayIncome - stats.todayExpense,
+      smartInsights: { yesterdayIncome: yInc, incomeVsYesterday: stats.todayIncome - yInc, thisWeekIncome: twInc, lastWeekIncome: lwInc, weekGrowth: wkGr, due1to7: d7, due8to30: d30, due30plus: d30p, topServices: topSvc, pendingDue: pDue, overdueCount: oDue },
+    };
+  }, []); // empty deps OK — key={refreshKey} handles remount
+
   if (loading) return <SkeletonDashboard />;
 
-  const shopInfo = getShopInfo();
-
-  // Live derived data — no stale hooks
-  const stats = getDashboardStats();
-  const allJobs = getJobs();
-  const allTxs = getTransactions();
-  const unreadCount = getNotifications().filter(n => !n.read).length;
-  const todayJobs: Job[] = allJobs.filter(j => isToday(j.date)).sort((a, b) => b.createdAt - a.createdAt);
-
-  const todayStart = getTodayStart();
-  const todayEnd = getTodayEnd();
-  const jobsToday = allJobs.filter(j => j.date >= todayStart && j.date <= todayEnd && j.status !== 'cancelled');
-  const serviceMapToday: Record<string, number> = {};
-  jobsToday.forEach(job => job.services.forEach(s => { serviceMapToday[s.serviceName] = (serviceMapToday[s.serviceName] || 0) + s.total; }));
-  const serviceWiseIncome = Object.entries(serviceMapToday).map(([name, amount]) => ({ name: name.length > 8 ? name.slice(0, 8) + '..' : name, fullName: name, amount })).sort((a, b) => b.amount - a.amount).slice(0, 6);
-
-  const dueMap: Record<string, number> = {};
-  allJobs.filter(j => j.due > 0 && j.status !== 'cancelled').forEach(j => { dueMap[j.customerId] = (dueMap[j.customerId] || 0) + j.due; });
-  const topDueCustomers = Object.entries(dueMap).map(([id, due]) => ({ customer: getCustomerById(id), due })).filter(x => x.customer).sort((a, b) => b.due - a.due).slice(0, 5);
-
-  const weeklyTrend: { date: string; income: number }[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0,0,0,0);
-    const dayJobs = allJobs.filter(j => j.date >= d.getTime() && j.date < d.getTime() + 86400000 && j.status !== 'cancelled');
-    weeklyTrend.push({ date: d.toLocaleDateString('bn-BD', { weekday: 'short' }), income: dayJobs.reduce((s, j) => s + j.totalAmount - j.due, 0) });
-  }
-
-  const now = new Date();
-  const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1); yesterday.setHours(0,0,0,0);
-  const yTxs = allTxs.filter(t => t.date >= yesterday.getTime() && t.date < yesterday.getTime() + 86400000);
-  const yesterdayIncome = yTxs.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
-  const weekStart = new Date(now); weekStart.setDate(weekStart.getDate() - weekStart.getDay()); weekStart.setHours(0,0,0,0);
-  const lastWeekStart = new Date(weekStart); lastWeekStart.setDate(lastWeekStart.getDate() - 7);
-  const thisWeekIncome = allTxs.filter(t => t.type === 'income' && t.date >= weekStart.getTime()).reduce((s, t) => s + t.amount, 0);
-  const lastWeekIncome = allTxs.filter(t => t.type === 'income' && t.date >= lastWeekStart.getTime() && t.date < weekStart.getTime()).reduce((s, t) => s + t.amount, 0);
-  const weekGrowth = lastWeekIncome > 0 ? Math.round(((thisWeekIncome - lastWeekIncome) / lastWeekIncome) * 100) : 0;
-  const dueJobs = allJobs.filter(j => j.due > 0 && j.status !== 'cancelled');
-  const nowMs = Date.now();
-  const due1to7 = dueJobs.filter(j => nowMs - j.date <= 7 * 86400000).reduce((s, j) => s + j.due, 0);
-  const due8to30 = dueJobs.filter(j => { const age = nowMs - j.date; return age > 7 * 86400000 && age <= 30 * 86400000; }).reduce((s, j) => s + j.due, 0);
-  const due30plus = dueJobs.filter(j => nowMs - j.date > 30 * 86400000).reduce((s, j) => s + j.due, 0);
-  const serviceMapAll: Record<string, number> = {};
-  allJobs.filter(j => j.status !== 'cancelled').forEach(j => j.services.forEach(s => { serviceMapAll[s.serviceName] = (serviceMapAll[s.serviceName] || 0) + s.total; }));
-  const topServices = Object.entries(serviceMapAll).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  const pendingDue = dueJobs.filter(j => j.status === 'pending' || j.status === 'in-progress').length;
-  const overdueCount = dueJobs.filter(j => nowMs - j.date > 7 * 86400000).length;
-  const smartInsights = { yesterdayIncome, incomeVsYesterday: stats.todayIncome - yesterdayIncome, thisWeekIncome, lastWeekIncome, weekGrowth, due1to7, due8to30, due30plus, topServices, pendingDue, overdueCount };
-
-  // Dark-mode safe colors (all visible on both light & dark)
+  const { shopInfo, stats, todayJobs, unreadCount, serviceWiseIncome, topDueCustomers, weeklyTrend, netIncome, smartInsights } = data;
   const COLORS = ['#2563EB', '#3b82f6', '#60a5fa', '#F59E0B', '#22C55E', '#8B5CF6'];
-  const netIncome = stats.todayIncome - stats.todayExpense;
   const isDark = document.documentElement.classList.contains('dark');
   const tooltipStyle = { background: isDark ? '#1E293B' : '#fff', border: 'none', borderRadius: 12, color: isDark ? '#F1F5F9' : '#0F172A', fontSize: 12 };
 

@@ -32,7 +32,6 @@ export default function JobList({ navigate }: Props) {
   const { isMobile } = useResponsive();
   const { toast } = useToast();
   const confirm = useConfirm();
-  if (loading) return <SkeletonJobList />;
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
@@ -47,6 +46,8 @@ export default function JobList({ navigate }: Props) {
     const matchSearch = !search || c?.name.toLowerCase().includes(search.toLowerCase()) || c?.mobile.includes(search) || job.services.some(s => s.serviceName.includes(search));
     return matchSearch && (statusFilter === 'all' || job.status === statusFilter);
   }), [jobs, search, statusFilter]);
+
+  if (loading) return <SkeletonJobList />;
 
   const handleDelete = async (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
