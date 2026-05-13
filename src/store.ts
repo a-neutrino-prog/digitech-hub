@@ -27,6 +27,10 @@ export type { Transaction } from './stores/transactions';
 export { getReminders, addReminder, updateReminder, deleteReminder, completeReminder, getActiveReminders, getUpcomingReminders } from './stores/reminders';
 export type { Reminder } from './stores/reminders';
 
+// Due Tracking
+export { getDueTrackers, getDueTracker, upsertDueTracker, addDueFollowUp, updateDueStatus, getCustomerFollowUps, getOverdueCount, refreshDueStatuses, DUE_STATUS_CONFIG } from './stores/dueTracking';
+export type { DueStatus, DueFollowUp, DueTracker } from './stores/dueTracking';
+
 // Settings & Notifications
 export { getShopInfo, updateShopInfo, getNotifications, addNotification, markNotificationRead, markAllNotificationsRead, deleteNotification } from './stores/settings';
 export { hashPin, getPinHash, setPinCode, verifyPin, removePinCode, isPinEnabled, getDarkMode, setDarkMode, isOnboardingComplete, completeOnboarding } from './stores/settings';
