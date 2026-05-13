@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { getShopInfo, updateShopInfo, getServices, addService, updateService, deleteService, exportBackup, importBackup, clearAllData, isPinEnabled, setPinCode, removePinCode, exportJobsCSV, exportTransactionsCSV, exportCustomersCSV } from '../store';
+import { getShopInfo, updateShopInfo, getServices, addService, updateService, deleteService, exportBackup, importBackup, previewBackup, clearAllData, isPinEnabled, setPinCode, removePinCode, exportJobsCSV, exportTransactionsCSV, exportCustomersCSV, formatDate, type BackupSummary } from '../store';
+import Modal from './ui/Modal';
 import { useDarkMode } from '../hooks/useDarkMode';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
@@ -15,6 +16,7 @@ export default function Settings({ navigate, refresh }: Props) {
   const { toast } = useToast();
   const confirm = useConfirm();
   const shopInfo = getShopInfo();
+  const [backupPreview, setBackupPreview] = useState<{ summary: BackupSummary; rawData: string } | null>(null);
   const [shopName, setShopName] = useState(shopInfo.shopName);
   const [ownerName, setOwnerName] = useState(shopInfo.ownerName);
   const [phone, setPhone] = useState(shopInfo.phone);
@@ -62,17 +64,29 @@ export default function Settings({ navigate, refresh }: Props) {
       if (!file) return;
       const reader = new FileReader();
       reader.onload = (ev) => {
-        const result = importBackup(ev.target?.result as string);
-        if (result.success) {
-          toast.success('ব্যাকআপ রিস্টোর হয়েছে!');
-          window.location.reload();
+        const rawData = ev.target?.result as string;
+        const preview = previewBackup(rawData);
+        if (preview.valid && preview.summary) {
+          setBackupPreview({ summary: preview.summary, rawData });
         } else {
-          toast.error(result.error || 'ব্যাকআপ ফাইল সঠিক নয়!');
+          toast.error(preview.error || 'ব্যাকআপ ফাইল সঠিক নয়!');
         }
       };
       reader.readAsText(file);
     };
     input.click();
+  };
+
+  const handleConfirmImport = () => {
+    if (!backupPreview) return;
+    const result = importBackup(backupPreview.rawData);
+    if (result.success) {
+      toast.success('ব্যাকআপ রিস্টোর হয়েছে!');
+      setBackupPreview(null);
+      window.location.reload();
+    } else {
+      toast.error(result.error || 'রিস্টোর ব্যর্থ');
+    }
   };
 
   const handleClearData = async () => {
@@ -372,6 +386,54 @@ export default function Settings({ navigate, refresh }: Props) {
           </button>
           <p className="text-[10px] text-red-400 mt-2 text-center">সতর্কতা: এটি সব ডেটা স্থায়ীভাবে মুছে ফেলবে</p>
         </div>
+        {/* Backup Preview Modal */}
+        <Modal open={!!backupPreview} onClose={() => setBackupPreview(null)} title="📦 ব্যাকআপ প্রিভিউ" subtitle="ইম্পোর্ট করার আগে দেখুন">
+          {backupPreview && (
+            <div>
+              <div className="bg-gray-50 rounded-2xl p-4 mb-4">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-2">ব্যাকআপ তথ্য</p>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between"><span className="text-gray-500">ভার্সন:</span><span className="font-semibold text-gray-700">v{backupPreview.summary.version}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">তারিখ:</span><span className="font-semibold text-gray-700">{backupPreview.summary.exportedAt ? formatDate(backupPreview.summary.exportedAt) : 'অজানা'}</span></div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 rounded-2xl p-4 mb-4">
+                <p className="text-[10px] text-gray-400 uppercase tracking-wider mb-2">ডেটা তুলনা</p>
+                <table className="w-full text-xs">
+                  <thead><tr><th className="text-left text-gray-400 pb-2">আইটেম</th><th className="text-right text-gray-400 pb-2">বর্তমান</th><th className="text-right text-gray-400 pb-2">ব্যাকআপ</th></tr></thead>
+                  <tbody>
+                    {Object.entries(backupPreview.summary.counts).map(([key, count]) => {
+                      const labels: Record<string, string> = { customers: '👤 গ্রাহক', jobs: '📋 কাজ', transactions: '💰 হিসাব', services: '⚙️ সেবা', reminders: '⏰ রিমাইন্ডার' };
+                      const current = backupPreview.summary.currentCounts[key] || 0;
+                      const diff = count - current;
+                      return (
+                        <tr key={key} className="border-t border-gray-200">
+                          <td className="py-2 text-gray-600">{labels[key] || key}</td>
+                          <td className="py-2 text-right font-semibold">{current}</td>
+                          <td className="py-2 text-right">
+                            <span className="font-semibold">{count}</span>
+                            {diff !== 0 && <span className={`ml-1 text-[10px] ${diff > 0 ? 'text-green-600' : 'text-red-600'}`}>({diff > 0 ? '+' : ''}{diff})</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="bg-warning-light rounded-2xl p-3 mb-4">
+                <p className="text-xs text-warning-dark font-semibold">⚠️ সতর্কতা</p>
+                <p className="text-[10px] text-warning-dark/80 mt-0.5">ইম্পোর্ট করলে বর্তমান ডেটা প্রতিস্থাপিত হবে।</p>
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={() => setBackupPreview(null)} className="flex-1 py-3 rounded-2xl font-semibold text-sm bg-gray-100 text-gray-700 border border-gray-200 active:scale-[0.97] transition-all">বাতিল</button>
+                <button onClick={handleConfirmImport} className="flex-[2] py-3 rounded-2xl font-semibold text-sm text-white active:scale-[0.97] transition-all" style={{ background: 'linear-gradient(135deg, #2563EB, #1D4ED8)', boxShadow: '0 8px 24px rgba(37,99,235,0.2)' }}>📥 ইম্পোর্ট করুন</button>
+              </div>
+            </div>
+          )}
+        </Modal>
       </div>
     </div>
   );

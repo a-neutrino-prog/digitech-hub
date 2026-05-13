@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { getJobs, getCustomerById, completeJob, addPaymentToJob, deleteJob, deletePaymentFromJob, updatePaymentInJob, updateJob, formatTaka, formatDate, getShopInfo } from '../store';
 import type { Page } from '../App';
-import { ArrowLeft, Edit, Trash2, CheckCircle, CreditCard, Share2, Printer, X, Save, Download, Clock, Play } from 'lucide-react';
-import { generateJobReceipt } from '../utils/pdf';
+import { ArrowLeft, Edit, Trash2, CheckCircle, CreditCard, Share2, Printer, X, Save, Download, Clock, Play, FileText } from 'lucide-react';
+import { generateJobReceipt, generateInvoice, shareReceipt } from '../utils/pdf';
 import { useToast } from '../hooks/useToast';
 import { useConfirm } from '../hooks/useConfirm';
 import Modal from './ui/Modal';
@@ -87,13 +87,6 @@ export default function JobDetail({ navigate, refresh, jobId }: Props) {
   };
 
   const handleDownloadPDF = () => { generateJobReceipt(job); toast.success('PDF ডাউনলোড হচ্ছে'); };
-
-  const handlePrint = () => {
-    const w = window.open('', '_blank');
-    if (!w) return;
-    w.document.write(`<html><head><meta charset="UTF-8"><title>রসিদ</title><style>body{font-family:'Noto Sans Bengali',sans-serif;padding:20px;max-width:400px;margin:0 auto}.header{text-align:center;border-bottom:2px solid #333;padding-bottom:10px;margin-bottom:15px}.header h1{margin:0;font-size:18px}.header p{margin:2px 0;font-size:12px;color:#666}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{padding:6px 8px;text-align:left;border-bottom:1px solid #eee;font-size:13px}th{background:#f5f5f5}.total{font-weight:bold;font-size:15px}.footer{text-align:center;margin-top:20px;font-size:11px;color:#999}</style></head><body><div class="header"><h1>${shopInfo.shopName||'ডিজিটেক হাব'}</h1><p>${shopInfo.address||''}</p><p>ফোন: ${shopInfo.phone||''}</p></div><p><strong>তারিখ:</strong> ${formatDate(job.date)}</p><p><strong>গ্রাহক:</strong> ${customer?.name||'N/A'}</p><p><strong>মোবাইল:</strong> ${customer?.mobile||'N/A'}</p><table><tr><th>সেবা</th><th>পরিমাণ</th><th>রেট</th><th>মোট</th></tr>${job.services.map(s=>`<tr><td>${s.serviceName}</td><td>${s.quantity}</td><td>৳${s.rate}</td><td>৳${s.total}</td></tr>`).join('')}</table><p class="total">মোট: ৳${job.totalAmount}</p><p>পরিশোধ: ৳${job.totalAmount-job.due}</p><p style="color:${job.due>0?'red':'green'}">বাকি: ৳${job.due}</p><p>স্ট্যাটাস: ${status.label}</p><div class="footer"><p>ধন্যবাদ!</p></div><script>window.print()</script></body></html>`);
-    w.document.close();
-  };
 
   const handleWhatsApp = () => {
     if (!customer?.mobile) return;
@@ -234,10 +227,13 @@ export default function JobDetail({ navigate, refresh, jobId }: Props) {
               )}
             </>
           )}
-          <div className="grid grid-cols-3 gap-2">
-            <button onClick={handleDownloadPDF} className="py-3 bg-white border border-gray-200 text-gray-700 rounded-2xl font-medium text-xs flex items-center justify-center gap-1.5 card-hover" aria-label="PDF"><Download size={14} />PDF</button>
-            <button onClick={handlePrint} className="py-3 bg-white border border-gray-200 text-gray-700 rounded-2xl font-medium text-xs flex items-center justify-center gap-1.5 card-hover" aria-label="প্রিন্ট"><Printer size={14} />প্রিন্ট</button>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={handleDownloadPDF} className="py-3 bg-white border border-gray-200 text-gray-700 rounded-2xl font-medium text-xs flex items-center justify-center gap-1.5 card-hover" aria-label="রসিদ"><Printer size={14} />রসিদ</button>
+            <button onClick={() => generateInvoice(job)} className="py-3 bg-white border border-gray-200 text-gray-700 rounded-2xl font-medium text-xs flex items-center justify-center gap-1.5 card-hover" aria-label="ইনভয়েস"><FileText size={14} />ইনভয়েস (A4)</button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
             <button onClick={handleWhatsApp} className="py-3 bg-success-light border border-green-200 text-success-dark rounded-2xl font-medium text-xs flex items-center justify-center gap-1.5 card-hover" aria-label="WhatsApp"><Share2 size={14} />WhatsApp</button>
+            <button onClick={() => shareReceipt(job)} className="py-3 bg-primary-50 border border-blue-200 text-primary rounded-2xl font-medium text-xs flex items-center justify-center gap-1.5 card-hover" aria-label="শেয়ার"><Download size={14} />শেয়ার</button>
           </div>
         </div>
       </div>

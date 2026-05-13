@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
-import { getTransactions, getJobs, getCustomerById, formatTaka } from '../store';
+import { getTransactions, getJobs, getCustomerById, formatTaka, exportJobsCSV, exportTransactionsCSV } from '../store';
+import { useToast } from '../hooks/useToast';
 import type { Page } from '../App';
 import useResponsive from '../hooks/useResponsive';
-import { ArrowLeft, Download } from 'lucide-react';
+import { ArrowLeft, Download, FileSpreadsheet, Printer } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
 import { generateReportPDF } from '../utils/pdf';
 
@@ -14,7 +15,9 @@ type Period = 'day' | 'week' | 'month' | 'year';
 
 export default function Reports({ navigate }: Props) {
   const { isMobile } = useResponsive();
+  const { toast } = useToast();
   const [period, setPeriod] = useState<Period>('month');
+
 
   const transactions = useMemo(() => getTransactions(), []);
   const jobs = useMemo(() => getJobs(), []);
@@ -300,12 +303,62 @@ export default function Reports({ navigate }: Props) {
           </div>
         )}
 
+        {/* Customer Profitability */}
+        {filteredJobs.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200/60 p-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">🏆 গ্রাহক লাভজনকতা</h3>
+            <div className="space-y-2">
+              {(() => {
+                const map: Record<string, { name: string; total: number; count: number }> = {};
+                filteredJobs.filter(j => j.status !== 'cancelled').forEach(j => {
+                  const c = getCustomerById(j.customerId);
+                  if (!c) return;
+                  if (!map[j.customerId]) map[j.customerId] = { name: c.name, total: 0, count: 0 };
+                  map[j.customerId].total += j.totalAmount;
+                  map[j.customerId].count++;
+                });
+                return Object.values(map).sort((a, b) => b.total - a.total).slice(0, 5).map((c, i) => (
+                  <div key={i} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">{i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i+1}.`}</span>
+                      <div><span className="text-sm text-gray-700">{c.name}</span><span className="text-[10px] text-gray-400 ml-2">{c.count}টি কাজ</span></div>
+                    </div>
+                    <span className="text-sm font-bold text-primary">{formatTaka(c.total)}</span>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Export Section */}
+        <div className="bg-white rounded-2xl border border-gray-200/60 p-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">📥 ডেটা এক্সপোর্ট</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => { const blob = new Blob(['\uFEFF' + exportJobsCSV()], { type: 'text/csv;charset=utf-8;' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `jobs-report.csv`; a.click(); toast.success('কাজের CSV ডাউনলোড হচ্ছে'); }}
+              className="py-3 bg-green-50 text-green-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-green-200 active:scale-95 transition-all">
+              <FileSpreadsheet size={14} /> কাজের CSV
+            </button>
+            <button onClick={() => { const blob = new Blob(['\uFEFF' + exportTransactionsCSV()], { type: 'text/csv;charset=utf-8;' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `transactions-report.csv`; a.click(); toast.success('হিসাব CSV ডাউনলোড হচ্ছে'); }}
+              className="py-3 bg-blue-50 text-blue-700 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 border border-blue-200 active:scale-95 transition-all">
+              <FileSpreadsheet size={14} /> হিসাব CSV
+            </button>
+          </div>
+        </div>
+
+        {/* Print Report */}
+        <button onClick={handleExportPDF}
+          className="w-full py-3.5 rounded-2xl font-semibold text-sm text-white flex items-center justify-center gap-2 active:scale-[0.97] transition-all"
+          style={{ background: 'linear-gradient(135deg, #2563EB, #1D4ED8)', boxShadow: '0 8px 24px rgba(37,99,235,0.2)' }}>
+          <Printer size={16} /> রিপোর্ট প্রিন্ট / PDF
+        </button>
+
         {/* Empty State */}
         {filteredTx.length === 0 && filteredJobs.length === 0 && (
-          <div className="bg-white rounded-2xl p-8 text-center shadow-sm">
-            <div className="text-4xl mb-2">📊</div>
-            <p className="text-gray-400 text-sm">এই সময়ে কোনো ডেটা নেই</p>
-            <p className="text-gray-300 text-xs mt-1">কাজ এবং হিসাব যোগ করুন রিপোর্ট দেখতে</p>
+          <div className="bg-white rounded-2xl border border-gray-200/60 p-10 text-center">
+            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-50 to-primary-100 flex items-center justify-center text-3xl mx-auto mb-3 empty-illustration">📊</div>
+            <p className="text-gray-500 font-medium">কোনো ডেটা নেই</p>
+            <p className="text-gray-400 text-xs mt-1">কাজ ও হিসাব যোগ করুন</p>
           </div>
         )}
       </div>

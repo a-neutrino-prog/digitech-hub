@@ -70,10 +70,29 @@ export default function App() {
       setRefreshKey(k => k + 1);
     });
 
+    // Auto-lock after 5 minutes of inactivity
+    let inactivityTimer: ReturnType<typeof setTimeout>;
+    const LOCK_TIMEOUT = 5 * 60 * 1000;
+
+    const resetInactivity = () => {
+      clearTimeout(inactivityTimer);
+      if (isPinEnabled()) {
+        inactivityTimer = setTimeout(() => {
+          setLocked(true);
+        }, LOCK_TIMEOUT);
+      }
+    };
+
+    const events = ['mousedown', 'keydown', 'touchstart', 'scroll'];
+    events.forEach(e => document.addEventListener(e, resetInactivity, { passive: true }));
+    resetInactivity();
+
     return () => {
       window.removeEventListener('online', goOnline);
       window.removeEventListener('offline', goOffline);
       unsubSync();
+      clearTimeout(inactivityTimer);
+      events.forEach(e => document.removeEventListener(e, resetInactivity));
     };
   }, []);
 
